@@ -49,17 +49,28 @@ The service starts on **http://localhost:8080**.
 | `npm run build` | Delete `dist/`, then compile TypeScript into it |
 | `npm run clean` | Delete `dist/` |
 | `npm run lint` | Lint `app/` with ESLint and typescript-eslint (`eslint.config.mjs`) |
+| `npm run typecheck` | Type-check without emitting files |
+| `npm run secrets` | Scan the project for committed secrets (API keys, tokens, private keys) with secretlint |
 
 Git hooks are managed by [husky](https://typicode.github.io/husky/) and installed by `npm install` (the
-`prepare` script). The `pre-push` hook (`.husky/pre-push`) runs `npm version patch`, which bumps the patch
-version and creates a version commit and tag locally; push again to publish them.
+`prepare` script):
+
+- **pre-commit** blocks commits containing secrets. It runs `npm run secrets`, plus
+  [gitleaks](https://github.com/gitleaks/gitleaks) on the staged changes if gitleaks is installed
+  (`brew install gitleaks`).
+- **pre-push** runs `npm run lint` and `npm run typecheck`.
 
 TypeScript and ts-node are development dependencies. For a production install (`npm ci --omit=dev`), build
 first (e.g. in CI or a Docker build stage) and run `npm run start:dist`.
 
 ### Configuration
 
-All settings are optional environment variables (see `app/config/global.config.ts`):
+All settings are optional environment variables (see `app/config/global.config.ts`). `.env.example` lists them
+all; copy it to `.env` (gitignored) and run with `node --env-file=.env ./dist/app/index.js`.
+
+> **Never commit secrets.** API keys and tokens belong only in environment variables or an untracked `.env`
+> file. `.env*` (except `.env.example`), `.npmrc` and key/certificate files are gitignored, and commits are
+> scanned for secrets.
 
 | Variable | Default | Description |
 |---|---|---|

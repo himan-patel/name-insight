@@ -1,6 +1,18 @@
 node_modules
 dist
 
+# Secrets: never commit these. Document variable names in .env.example instead.
 .env
+.env.*
+!.env.example
+.npmrc
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+secrets/
+
+# Editor / OS
 .vscode
 .DS_Store

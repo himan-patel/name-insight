@@ -1,1 +1,3 @@
-npm version patch
+# Block pushes that fail lint or typecheck. Versions are bumped deliberately at release time.
+npm run --silent lint
+npm run --silent typecheck
