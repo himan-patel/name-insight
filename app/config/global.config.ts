@@ -24,6 +24,9 @@ export const appName = process.env.APP_NAME || 'NameInsight';
 export const host = process.env.API_HOST || '0.0.0.0';
 export const port = intFromEnv('API_PORT', 8080);
 
+/** Set LOG_REQUESTS=false to turn off the per-request access log (e.g. in tests). */
+export const logRequests = process.env.LOG_REQUESTS !== 'false';
+
 /** Origins allowed to call the API from a browser. Empty means cross-origin requests are not allowed. */
 export const corsOrigins = listFromEnv('CORS_ORIGINS');
 

@@ -30,6 +30,11 @@ export function normalizeDomain(input: unknown): string {
     if (trimmed.length === 0 || trimmed.length > 253) {
         throw new HttpError(400, 'Domain must be between 1 and 253 characters', { domain: input });
     }
+    // domainToASCII silently strips tabs/newlines (WHATWG URL rules), which would look up a different name
+    // eslint-disable-next-line no-control-regex -- matching control characters is the point
+    if (/[\s\u0000-\u001f\u007f]/.test(trimmed)) {
+        throw new HttpError(400, 'Invalid domain name', { domain: input });
+    }
     if (isIP(trimmed)) {
         throw new HttpError(400, 'IP addresses are not accepted; provide a domain name', { domain: input });
     }

@@ -1,5 +1,6 @@
 node_modules
 dist
+coverage
 
 # Secrets: never commit these. Document variable names in .env.example instead.
 .env
