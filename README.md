@@ -175,3 +175,7 @@ hand with Swagger UI or the curl commands above.
   It counts requests, not domains, so one client can trigger up to 50 lookups per request.
 - **WHOIS servers rate-limit heavy use.** Large or frequent bulk requests may start getting `whoisError` results.
 - **`available` is an estimate** (see the note at the top).
+
+## License
+
+[MIT](LICENSE) © 2026 Himan Patel
