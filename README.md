@@ -1,5 +1,7 @@
 # NameInsight
 
+[![CI](https://github.com/himan-patel/name-insight/actions/workflows/ci.yml/badge.svg)](https://github.com/himan-patel/name-insight/actions/workflows/ci.yml)
+
 **NameInsight** looks up domain names and estimates whether they are available to register. It's a small
 Express + TypeScript REST service.
 
@@ -182,6 +184,9 @@ app/
 npm test               # Jest unit + HTTP tests (no network access needed)
 npm run test:coverage  # with a coverage report
 ```
+
+CI (`.github/workflows/ci.yml`) runs lint, typecheck, tests, build, `npm audit` and a secret scan (gitleaks on the
+full git history plus secretlint) on every pull request. Dependabot opens weekly dependency update PRs.
 
 Tests live in `test/`. DNS, ping and WHOIS are mocked or served by local fake servers, so the suite is fast and
 deterministic. HTTP behavior is tested with [supertest](https://github.com/ladjs/supertest) against
