@@ -57,15 +57,15 @@ export async function resolvePublicHost(host: string): Promise<string> {
 
 /**
  * Sends one WHOIS query. The socket is always destroyed by the deadline, and at most `maxBytes`
- * are kept (a longer response is truncated).
+ * are kept (a longer response is truncated). `port` exists for tests; lookups always use port 43.
  */
-export function queryServer(ip: string, query: string): Promise<string> {
+export function queryServer(ip: string, query: string, port: number = WHOIS_PORT): Promise<string> {
     return new Promise((resolve, reject) => {
         const chunks: Buffer[] = [];
         let received = 0;
         let settled = false;
 
-        const socket = net.connect({ host: ip, port: WHOIS_PORT });
+        const socket = net.connect({ host: ip, port });
         const finish = (error?: Error) => {
             if (settled) {
                 return;

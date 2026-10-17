@@ -50,6 +50,7 @@ The service starts on **http://localhost:8080**.
 | `npm run clean` | Delete `dist/` |
 | `npm run lint` | Lint `app/` with ESLint and typescript-eslint (`eslint.config.mjs`) |
 | `npm run typecheck` | Type-check without emitting files |
+| `npm test` | Run the test suite (`npm run test:coverage` for coverage) |
 | `npm run secrets` | Scan the project for committed secrets (API keys, tokens, private keys) with secretlint |
 
 Git hooks are managed by [husky](https://typicode.github.io/husky/) and installed by `npm install` (the
@@ -77,6 +78,7 @@ all; copy it to `.env` (gitignored) and run with `node --env-file=.env ./dist/ap
 | `API_PORT` | `8080` | Port the server listens on |
 | `API_HOST` | `0.0.0.0` | Address the server binds to. Use `127.0.0.1` to accept local connections only |
 | `APP_NAME` | `NameInsight` | API title shown in Swagger UI |
+| `LOG_REQUESTS` | `true` | Set to `false` to turn off the per-request access log |
 | `CORS_ORIGINS` | _(empty)_ | Comma-separated origins allowed to call the API from a browser, e.g. `https://app.example.com`. Empty means no cross-origin access |
 | `TRUST_PROXY_HOPS` | `0` | Number of reverse proxies in front of the service. Set this behind a load balancer so rate limiting uses the real client IP |
 | `RATE_LIMIT_MAX` | `30` | Requests allowed per client IP per window on `/api/*` |
@@ -156,7 +158,8 @@ curl -F "file=@domains.txt;type=text/plain" http://localhost:8080/api/v1/domains
 
 ```text
 app/
-├── index.ts                    # Express server setup, middleware, Swagger mount
+├── index.ts                    # Entry point: starts the server
+├── app.ts                      # createApp(): middleware, Swagger mount, routes, error handling
 ├── config/global.config.ts     # Environment-based configuration
 ├── docs/openapi.ts             # OpenAPI spec served at /api-docs
 ├── models/
@@ -175,8 +178,14 @@ app/
 
 ## Testing
 
-There are no automated tests yet (`npm test` is a placeholder that exits with an error). For now, test by
-hand with Swagger UI or the curl commands above.
+```bash
+npm test               # Jest unit + HTTP tests (no network access needed)
+npm run test:coverage  # with a coverage report
+```
+
+Tests live in `test/`. DNS, ping and WHOIS are mocked or served by local fake servers, so the suite is fast and
+deterministic. HTTP behavior is tested with [supertest](https://github.com/ladjs/supertest) against
+`createApp()` (`app/app.ts`), which builds the Express app without listening on a port.
 
 ## Known limitations
 

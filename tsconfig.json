@@ -11,7 +11,9 @@
             "node"
         ],
         "strictNullChecks": false,
-        "resolveJsonModule": true
+        "resolveJsonModule": true,
+        "esModuleInterop": true,
+        "isolatedModules": true
     },
     "include": [
         "app/**/*.ts"
