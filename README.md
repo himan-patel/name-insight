@@ -187,6 +187,11 @@ hand with Swagger UI or the curl commands above.
 - **WHOIS servers rate-limit heavy use.** Large or frequent bulk requests may start getting `whoisError` results.
 - **`available` is an estimate** (see the note at the top).
 
+## Contributing and security
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the branch naming convention and PR workflow. Report
+vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
+
 ## License
 
 [MIT](LICENSE) © 2026 Himan Patel
