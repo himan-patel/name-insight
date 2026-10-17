@@ -1,0 +1,92 @@
+// Public
+import * as express from 'express';
+import multer from 'multer';
+
+// Internal
+import * as config from '../config/global.config';
+import { ExtractionType } from './../models/enums/extraction-type.enum';
+import { HttpError } from '../models/http-error';
+import { DomainService } from '../services/domain.service';
+import { normalizeDomain, normalizeDomainList } from '../services/domain-validation';
+
+// Files are kept in memory (never written to disk) and capped in size
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: config.maxUploadBytes, files: 1, fields: 0, parts: 1 },
+    fileFilter: (req, file, cb) => {
+        const mimeType = file.mimetype.toLowerCase();
+        if (mimeType === 'text/plain') {
+            cb(null, true);
+        } else {
+            cb(new HttpError(400, `Unsupported file type [${mimeType}]; upload a text/plain file`));
+        }
+    }
+}).single('file');
+
+/** Runs multer and turns its errors into 400/413 responses instead of 500s. */
+function handleUpload(req: express.Request, res: express.Response, next: express.NextFunction) {
+    upload(req, res, (error: unknown) => {
+        if (!error || error instanceof HttpError) {
+            return next(error);
+        }
+        if (error instanceof multer.MulterError) {
+            const status = error.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+            return next(new HttpError(status, `Invalid upload: ${error.message}`));
+        }
+        // anything else comes from parsing the multipart stream (e.g. truncated body)
+        next(new HttpError(400, 'Malformed multipart body'));
+    });
+}
+
+export class DomainRoutes {
+    private _domainService: DomainService;
+
+    constructor() {
+        this._domainService = new DomainService();
+    }
+
+    register(router: express.Router) {
+        router.get('/api/v1/domains/info/:domain', (req, res, next) => this.getInfoSingle(req, res, next));
+        router.post('/api/v1/domains/info/_file', handleUpload, (req, res, next) => this.getInfoBulk(req, res, next, ExtractionType.FILE));
+        router.post('/api/v1/domains/info/_payload', (req, res, next) => this.getInfoBulk(req, res, next, ExtractionType.PAYLOAD));
+
+        return router;
+    }
+
+    async getInfoSingle(req: express.Request, res: express.Response, next: express.NextFunction) {
+        try {
+            const domain = normalizeDomain(req.params.domain);
+            res.status(200).json(await this._domainService.getDomainInfo(domain));
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async getInfoBulk(req: express.Request, res: express.Response, next: express.NextFunction, type: ExtractionType) {
+        try {
+            let rawDomains: unknown;
+
+            switch (type) {
+                case ExtractionType.FILE:
+                    if (!req.file) {
+                        throw new HttpError(400, 'Missing file: send a text/plain file in the "file" form field');
+                    }
+                    rawDomains = this._domainService.parseDomainFile(req.file.buffer);
+                    break;
+
+                case ExtractionType.PAYLOAD:
+                    rawDomains = req.body?.domains;
+                    break;
+
+                default:
+                    throw new HttpError(400, 'Unknown upload type');
+            }
+
+            const domains = normalizeDomainList(rawDomains, config.maxDomainsPerRequest);
+            res.status(200).json(await this._domainService.getDomainInfoBulk(domains));
+        } catch (error) {
+            next(error);
+        }
+    }
+
+}

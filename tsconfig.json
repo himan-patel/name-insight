@@ -1,0 +1,23 @@
+{
+    "compilerOptions": {
+        "module": "node16",
+        "moduleResolution": "node16",
+        "target": "es2022",
+        "rootDir": ".",
+        "outDir": "./dist",
+        "pretty": true,
+        "sourceMap": true,
+        "types": [
+            "node"
+        ],
+        "strictNullChecks": false,
+        "resolveJsonModule": true
+    },
+    "include": [
+        "app/**/*.ts"
+    ],
+    "exclude": [
+        "node_modules",
+        "app/tests"
+    ]
+}
