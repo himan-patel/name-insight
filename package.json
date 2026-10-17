@@ -1,6 +1,6 @@
 {
   "name": "nameinsight",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "NameInsight: look up domain names and estimate whether they are available to register",
   "main": "dist/app/index.js",
   "engines": {
