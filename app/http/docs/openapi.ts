@@ -108,8 +108,23 @@ export const openApiSpec = {
         ].join('\n')
     },
     servers: [{ url: '/', description: 'This server' }],
-    tags: [{ name: 'Domains', description: 'Domain lookup and availability' }],
+    tags: [
+        { name: 'Domains', description: 'Domain lookup and availability' },
+        { name: 'Operations', description: 'Health and operational endpoints' }
+    ],
     paths: {
+        '/healthz': {
+            get: {
+                tags: ['Operations'],
+                summary: 'Health check',
+                description: 'Returns 200 while the service is running and 503 once graceful shutdown has started. Not rate limited.',
+                operationId: 'getHealth',
+                responses: {
+                    200: { description: 'Running', content: { 'application/json': { example: { status: 'ok' } } } },
+                    503: { description: 'Shutting down', content: { 'application/json': { example: { status: 'shutting-down' } } } }
+                }
+            }
+        },
         '/api/v1/domains/info/{domain}': {
             get: {
                 tags: ['Domains'],

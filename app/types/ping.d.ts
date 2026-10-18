@@ -1,4 +1,4 @@
-// Minimal typings for the parts of `ping@0.3` that NameInsight uses (the package ships none).
+// Minimal typings for the parts of `ping@0.4` that NameInsight uses (the package ships none).
 declare module 'ping' {
     export interface PingConfig {
         /** Seconds to wait for a reply. */
@@ -9,6 +9,8 @@ declare module 'ping' {
     }
 
     export interface PingResponse {
+        /** The address as passed to probe() (ping >= 0.4). */
+        inputHost?: string;
         host: string;
         numeric_host?: string;
         alive: boolean;

@@ -81,6 +81,7 @@ all; copy it to `.env` (gitignored) and run with `node --env-file=.env ./dist/ap
 | `API_HOST` | `0.0.0.0` | Address the server binds to. Use `127.0.0.1` to accept local connections only |
 | `APP_NAME` | `NameInsight` | API title shown in Swagger UI |
 | `LOG_REQUESTS` | `true` | Set to `false` to turn off the per-request access log |
+| `SHUTDOWN_TIMEOUT_MS` | `10000` | On SIGTERM/SIGINT, how long in-flight requests may finish before connections are force-closed |
 | `CORS_ORIGINS` | _(empty)_ | Comma-separated origins allowed to call the API from a browser, e.g. `https://app.example.com`. Empty means no cross-origin access |
 | `TRUST_PROXY_HOPS` | `0` | Number of reverse proxies in front of the service. Set this behind a load balancer so rate limiting uses the real client IP |
 | `RATE_LIMIT_MAX` | `30` | Requests allowed per client IP per window on `/api/*` |
@@ -120,8 +121,12 @@ The spec is written by hand in `app/http/docs/openapi.ts`. When you add or chang
 | `GET` | `/api/v1/domains/info/:domain` | A single domain in the URL |
 | `POST` | `/api/v1/domains/info/_payload` | JSON body: `{ "domains": ["a.com", "b.com"] }` |
 | `POST` | `/api/v1/domains/info/_file` | `multipart/form-data` with a `file` field: a `text/plain` file, one domain per line |
+| `GET` | `/healthz` | Health check: `200 {"status":"ok"}`, or `503` once shutdown has started |
 
 The bulk endpoints return an array with one result per unique domain, in input order.
+
+On `SIGTERM`/`SIGINT` the server stops accepting connections, lets in-flight lookups finish (up to
+`SHUTDOWN_TIMEOUT_MS`), then exits. A second signal exits immediately.
 
 ### Input rules and errors
 

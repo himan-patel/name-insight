@@ -186,6 +186,7 @@ describe('app-wide behavior', () => {
         const spec = await request(app).get('/api-docs.json').expect(200);
         expect(spec.body.info.title).toBe('NameInsight');
         expect(Object.keys(spec.body.paths)).toEqual([
+            '/healthz',
             '/api/v1/domains/info/{domain}',
             '/api/v1/domains/info/_payload',
             '/api/v1/domains/info/_file'
