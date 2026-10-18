@@ -20,6 +20,7 @@ const DomainsPayload = DomainsPayloadSchema.meta({ id: 'DomainsPayload' });
 
 const availableExample = {
     domain: 'zzqx-unregistered-test-98123.com',
+    registrableDomain: 'zzqx-unregistered-test-98123.com',
     status: 'available',
     confidence: 'high',
     registration: { source: 'rdap', registered: false },
@@ -45,6 +46,7 @@ const availableExample = {
 
 const takenExample = {
     domain: 'example.com',
+    registrableDomain: 'example.com',
     status: 'registered',
     confidence: 'high',
     registration: {

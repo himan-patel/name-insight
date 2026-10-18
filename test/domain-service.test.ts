@@ -150,3 +150,24 @@ describe('DomainService with RDAP', () => {
         expect(info.rdap.error).toBe('RDAP not available for this TLD');
     });
 });
+
+describe('DomainService with subdomains', () => {
+    it('queries the registry for the registrable domain and DNS for the full name', async () => {
+        const rdap = { lookup: jest.fn(async () => ({ registered: true, server: 'rdap.example' })) } as unknown as import('../app/core/rdap').RdapClient;
+        records = { 'news.bbc.co.uk': { a: ['93.184.216.34'] } };
+
+        const info = await new DomainService(rdap).getDomainInfo('news.bbc.co.uk');
+
+        expect(rdap.lookup).toHaveBeenCalledWith('bbc.co.uk');
+        expect(whois).toHaveBeenCalledWith('bbc.co.uk');
+        expect(info).toMatchObject({ domain: 'news.bbc.co.uk', registrableDomain: 'bbc.co.uk', status: 'registered' });
+        expect(info.dns.addresses).toEqual(['93.184.216.34']);
+        expect(info.reasons[0]).toBe('This is a subdomain; registration status is for bbc.co.uk');
+    });
+
+    it('does not add the subdomain note for registrable domains', async () => {
+        const info = await service.getDomainInfo('example.com');
+        expect(info.registrableDomain).toBe('example.com');
+        expect(info.reasons.join(' ')).not.toContain('subdomain');
+    });
+});

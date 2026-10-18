@@ -1,5 +1,5 @@
 import { ValidationError } from '../app/core/errors';
-import { isPublicAddress, normalizeDomain, normalizeDomainList } from '../app/core/validation';
+import { isPublicAddress, normalizeDomain, normalizeDomainList, registrableDomain } from '../app/core/validation';
 
 describe('normalizeDomain', () => {
     it.each([
@@ -126,5 +126,23 @@ describe('isPublicAddress', () => {
 
     it.each(['not-an-ip', '', 'example.com', '999.1.1.1'])('treats non-IP %p as non-public', value => {
         expect(isPublicAddress(value)).toBe(false);
+    });
+});
+
+describe('registrable domains (Public Suffix List)', () => {
+    it.each([
+        ['example.com', 'example.com'],
+        ['www.google.com', 'google.com'],
+        ['expired.badssl.com', 'badssl.com'],
+        ['news.bbc.co.uk', 'bbc.co.uk'],
+        ['a.b.c.example.com.au', 'example.com.au'],
+        ['user.github.io', 'github.io'],
+        ['xn--mnchen-3ya.de', 'xn--mnchen-3ya.de']
+    ])('%s is registered as %s', (domain, expected) => {
+        expect(registrableDomain(domain)).toBe(expected);
+    });
+
+    it.each(['co.uk', 'com.au', 'CO.UK.'])('rejects public suffix %p', input => {
+        expect(() => normalizeDomain(input)).toThrow('This is a public suffix (like co.uk), not a registrable domain');
     });
 });

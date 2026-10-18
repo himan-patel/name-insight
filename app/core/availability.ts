@@ -27,6 +27,8 @@ export interface AssessmentInput {
     probe: PingProbe;
     /** Nameservers from DNS (insights), used for parking detection when the registry data has none. */
     dnsNameservers?: string[];
+    /** Set when the queried name is a subdomain: the registrable domain the registry data describes. */
+    subdomainOf?: string;
     now?: number;
 }
 
@@ -84,7 +86,9 @@ export function buildRegistration(input: AssessmentInput, now: number): Registra
 export function assessAvailability(input: AssessmentInput): Assessment {
     const now = input.now ?? Date.now();
     const registration = buildRegistration(input, now);
-    const reasons: string[] = [];
+    const reasons: string[] = input.subdomainOf
+        ? [`This is a subdomain; registration status is for ${input.subdomainOf}`]
+        : [];
     const source = registration.source === 'rdap' ? 'Registry (RDAP)' : 'WHOIS';
 
     if (registration.registered === false) {
