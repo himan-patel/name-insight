@@ -60,6 +60,7 @@ The service starts on **http://127.0.0.1:8080** (loopback only by default).
 |---|---|
 | `npm start` | Compile TypeScript, then run the compiled app (`dist/app/index.js`) |
 | `npm run start:dist` | Run the already-compiled app without rebuilding |
+| `npm run start:mcp` | Run the compiled MCP server over stdio (see [MCP server](#mcp-server)) |
 | `npm run start:tsnode` | Run the app from source with ts-node |
 | `npm run start-watch:tsnode` | Run from source and restart when a file changes (Node's built-in `--watch`) |
 | `npm run inspect:tsnode` | Run with the Node inspector attached, for debugging |
@@ -120,6 +121,48 @@ all; copy it to `.env` (gitignored) and run with `node --env-file=.env ./dist/ap
 Numeric values must be non-negative integers; the app refuses to start otherwise.
 
 For example: `API_PORT=3000 npm run start:tsnode`
+
+## MCP server
+
+NameInsight is also an [MCP](https://modelcontextprotocol.io) server, so AI assistants such as Claude can check
+domains directly. It runs locally over stdio:
+
+```bash
+npm install && npm run build
+npm run start:mcp          # or: node dist/app/mcp/stdio.js
+```
+
+**Claude Code:**
+
+```bash
+claude mcp add nameinsight -- node /absolute/path/to/name-insight/dist/app/mcp/stdio.js
+```
+
+**Claude Desktop** (`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "nameinsight": {
+      "command": "node",
+      "args": ["/absolute/path/to/name-insight/dist/app/mcp/stdio.js"]
+    }
+  }
+}
+```
+
+| Tool | What it does |
+|---|---|
+| `check_domain` | One domain: status, confidence, reasons, registration (dates, registrar), DNS and ping. `insights: true` adds nameservers, email setup and HTTPS/TLS; `include_raw_whois: true` adds the raw WHOIS text |
+| `check_domains` | Up to 50 domains at once |
+| `check_name_across_tlds` | One name across TLDs (default `.com .net .org .io .ai .dev .app .co`, or your own list), listing which are available |
+
+All tools are read-only. Results are compact (no raw WHOIS or ping output unless asked) and come with a typed
+`structuredContent` payload plus a one-line summary per domain. Invalid input returns a readable tool error. Logs go to
+stderr so they never interfere with the protocol on stdout.
+
+Try asking: *"Is nameinsight available as a .com or .io?"* or *"Check these five names and tell me which ones expire
+soon."*
 
 ## API documentation (Swagger)
 
@@ -214,6 +257,7 @@ app/
 │   ├── http-client.ts          # HTTPS JSON client: public-address pinning, size cap, deadline
 │   ├── schemas.ts              # zod data contract: types, OpenAPI schemas, MCP inputs
 │   └── errors.ts               # ValidationError (mapped to 400 by the HTTP layer)
+├── mcp/                        # MCP server (tools) and stdio entry point
 ├── http/                       # REST API (Express)
 │   ├── app.ts                  # createApp(): middleware, Swagger mount, routes, error handling
 │   ├── http-error.ts           # Error type carrying an HTTP status
