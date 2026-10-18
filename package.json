@@ -3,6 +3,9 @@
   "version": "1.0.1",
   "description": "NameInsight: look up domain names and estimate whether they are available to register",
   "main": "dist/app/index.js",
+  "bin": {
+    "nameinsight-mcp": "dist/app/mcp/stdio.js"
+  },
   "engines": {
     "node": ">=22"
   },
@@ -16,7 +19,9 @@
     "build": "npm run clean && tsc",
     "start": "npm run build && npm run start:dist",
     "start:dist": "node ./dist/app/index.js",
+    "start:mcp": "node ./dist/app/mcp/stdio.js",
     "start:tsnode": "ts-node ./app/index.ts",
+    "mcp:tsnode": "ts-node ./app/mcp/stdio.ts",
     "start-watch:tsnode": "node --watch --require ts-node/register ./app/index.ts",
     "inspect:tsnode": "node --inspect --require ts-node/register ./app/index.ts",
     "prepare": "husky"
@@ -25,6 +30,7 @@
   "license": "MIT",
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "9.1.0",
+    "@modelcontextprotocol/sdk": "1.32.0",
     "cors": "2.8.6",
     "express": "4.22.3",
     "express-rate-limit": "8.7.0",
@@ -62,6 +68,7 @@
     "@istanbuljs/load-nyc-config": {
       "js-yaml": "4.3.2"
     },
-    "tldts-core": "7.4.16"
+    "tldts-core": "7.4.16",
+    "express@5.3.0": "5.2.1"
   }
 }
