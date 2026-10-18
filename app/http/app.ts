@@ -15,6 +15,7 @@ import { openApiSpec } from './docs/openapi';
 import { SuggestionsFailedError, SuggestionsUnavailableError, ValidationError } from '../core';
 import { HttpError } from './http-error';
 import { lifecycle } from './lifecycle';
+import { mcpRouter } from './mcp-route';
 
 /**
  * Builds the Express application: security middleware, API docs, rate limiting, routes and error handling.
@@ -70,23 +71,23 @@ export function createApp(): express.Application {
     app.get('/api-docs.json', (req, res) => res.json(openApiSpec));
     app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(openApiSpec, { customSiteTitle: `${config.appName} API docs` }));
 
-    // stricter per-IP limit for AI suggestions, since each one calls a paid model
-    app.use('/api/v1/domains/suggest', rateLimit({
-        windowMs: config.rateLimitWindowMs,
-        limit: config.suggestRateLimitMax,
-        standardHeaders: false,
-        legacyHeaders: false,
-        message: { error: 'Too many suggestion requests, please try again later.' }
-    }));
-
-    // per-IP request limit on the public API (each request triggers outbound DNS, RDAP, WHOIS and ping)
-    app.use('/api/', rateLimit({
+    // one per-IP request limit shared by the REST API and the hosted MCP endpoint (each request triggers outbound
+    // DNS, RDAP, WHOIS and ping); MCP clients get the error in JSON-RPC form
+    app.use(['/api/', '/mcp'], rateLimit({
         windowMs: config.rateLimitWindowMs,
         limit: config.rateLimitMax,
         standardHeaders: 'draft-8',
         legacyHeaders: false,
-        message: { error: 'Too many requests, please try again later.' }
+        handler: (req, res, _next, options) => {
+            const message = 'Too many requests, please try again later.';
+            res.status(options.statusCode).json(req.baseUrl.toLowerCase() === '/mcp'
+                ? { jsonrpc: '2.0', error: { code: -32000, message }, id: null }
+                : { error: message });
+        }
     }));
+
+    // public, stateless MCP endpoint (Streamable HTTP)
+    app.use('/', mcpRouter());
 
     // register REST endpoints
     app.use('/', Routes.register());
