@@ -70,6 +70,13 @@ export function getJson(url: string, options: GetJsonOptions): Promise<JsonRespo
     if (target.protocol !== 'https:') {
         return Promise.reject(new Error(`Refusing non-HTTPS URL: ${target.protocol}`));
     }
+    // Node skips the custom lookup for IP-literal hosts, so check those here
+    const literal = target.hostname.replace(/^\[|\]$/g, '');
+    if (isIP(literal) && !isPublicAddress(literal)) {
+        const error: NodeJS.ErrnoException = new Error(`${literal} is not a public address`);
+        error.code = 'ENOTPUBLIC';
+        return Promise.reject(error);
+    }
 
     return new Promise((resolve, reject) => {
         const request = get(target, {

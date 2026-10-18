@@ -58,7 +58,7 @@ export class DomainService {
 
       let insights: Insights | undefined;
       if (options.insights) {
-        insights = await getInsights(domain, publicAddresses.length > 0 && !dnsResult.nonPublic);
+        insights = await getInsights(domain, publicAddresses.length > 0 && !dnsResult.nonPublic, undefined, Boolean(dnsResult.nonPublic));
       }
 
       const assessment = assessAvailability({

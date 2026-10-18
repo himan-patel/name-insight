@@ -1,6 +1,6 @@
 // Public
 import { BlockList, isIP } from 'net';
-import { getDomain } from 'tldts';
+import { getDomain, parse } from 'tldts';
 import { domainToASCII } from 'url';
 
 // Internal
@@ -51,6 +51,10 @@ export function normalizeDomain(input: unknown): string {
         throw new ValidationError('Reserved or internal domain names are not accepted', { domain: input });
     }
 
+    const parsed = parse(ascii, { allowPrivateDomains: false });
+    if (!parsed.isIcann) {
+        throw new ValidationError('Unknown top-level domain', { domain: input });
+    }
     if (!getDomain(ascii, { allowPrivateDomains: false })) {
         throw new ValidationError('This is a public suffix (like co.uk), not a registrable domain', { domain: input });
     }

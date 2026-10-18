@@ -158,7 +158,7 @@ all; copy it to `.env` (gitignored) and run with `node --env-file=.env ./dist/ap
 | `SUGGEST_RATE_LIMIT_MAX` | `5` | Suggestion requests per client IP per rate-limit window (REST and MCP combined) |
 | `GLOBAL_SUGGEST_MAX_PER_HOUR` | `100` | Claude API suggestion calls per hour for the whole process (caps spend on the server key) |
 | `MAX_CONCURRENT_AI_CALLS` | `2` | Claude API calls in flight at once |
-| `MCP_ALLOWED_HOSTS` | _(empty)_ | Comma-separated Host headers accepted by `POST /mcp`; enables DNS-rebinding protection |
+| `ALLOWED_HOSTS` | _(empty)_ | Comma-separated Host headers the server accepts (DNS-rebinding protection). Empty: localhost names only on a loopback bind, any host otherwise (with a startup warning). `MCP_ALLOWED_HOSTS` is an older alias |
 
 Numeric values must be non-negative integers; the app refuses to start otherwise.
 
@@ -234,8 +234,8 @@ claude mcp add --transport http nameinsight https://your-host.example/mcp
 
 Each request gets a fresh server, and tool calls draw on the same per-IP limits as the REST API (one shared request
 limit, lookup budget and suggestion limit). Over HTTP the server can't use client sampling, so `suggest_domains` needs
-`ANTHROPIC_API_KEY` on the server there. Set `MCP_ALLOWED_HOSTS` to your public hostname(s) to turn on DNS-rebinding
-protection. `GET` and `DELETE` return `405`.
+`ANTHROPIC_API_KEY` on the server there. Set `ALLOWED_HOSTS` to your public hostname(s) to turn on DNS-rebinding
+protection. `GET` and `DELETE` return `405`, and JSON-RPC batches are rejected.
 
 All tools are read-only. Results are compact (no raw WHOIS or ping output unless asked) and come with a typed
 `structuredContent` payload plus a one-line summary per domain. Invalid input returns a readable tool error. Logs go to
@@ -286,7 +286,7 @@ On `SIGTERM`/`SIGINT` the server stops accepting connections, lets in-flight loo
   name. Public suffixes themselves (`co.uk`, `com.au`) are rejected.
 - Only **public domain names** are accepted. IP addresses, `localhost`, internal suffixes (`.local`, `.internal`,
   `.lan`, `.test`, ...) and malformed names are rejected with `400`. Internationalized names (e.g. `münchen.de`)
-  are converted to punycode.
+  are converted to punycode. Only real (ICANN) top-level domains are accepted.
 - Bulk requests accept at most 50 domains (`MAX_DOMAINS_PER_REQUEST`). If any domain is invalid, the whole request
   is rejected with `400` and `details.invalid` lists each bad entry.
 - Uploaded files must be `text/plain` and at most 64 KB. Blank lines and lines starting with `#` are ignored.
@@ -382,6 +382,11 @@ deterministic. HTTP behavior is tested with [supertest](https://github.com/ladjs
 - **Confidence varies by TLD.** With RDAP or a clear WHOIS answer, `status` is authoritative (`high`). Some registries
   offer neither, and then the answer is an estimate (`medium` or `low`); check `confidence` before relying on it.
 - **Parking detection is a heuristic** based on a list of known parking and marketplace nameservers.
+- **RDAP redirects are not followed** (to keep outbound requests predictable); such registries fall back to WHOIS.
+  Registry-reserved or premium names can appear as "available" when the registry reports them as not registered.
+- **Deploying publicly:** bind `API_HOST=0.0.0.0`, set `ALLOWED_HOSTS` to your hostname(s), set `TRUST_PROXY_HOPS` to the
+  exact number of proxies in front of the service, and consider `DNS_SERVERS` (public resolvers) so internal DNS
+  views are never consulted. The server warns at startup about the first two.
 
 ## Status and roadmap
 

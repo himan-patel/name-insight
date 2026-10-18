@@ -86,7 +86,9 @@ export const InsightsSchema = z.object({
         dmarc: z.boolean().describe('A DMARC record exists at _dmarc.<domain>'),
         dmarcPolicy: z.enum(['none', 'quarantine', 'reject']).optional()
     }),
-    web: WebCheckSchema
+    web: WebCheckSchema,
+    skipped: z.literal('non-public-address').optional()
+        .describe('Set when the name resolves to private addresses; no further details are collected')
 }).describe('Optional extra signals (request with insights=true)');
 
 export const DOMAIN_STATUSES = ['available', 'registered', 'parked', 'expiring', 'unknown'] as const;

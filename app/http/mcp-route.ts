@@ -52,7 +52,7 @@ export function mcpRouter(service: DomainService = new DomainService()): express
         const transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: undefined,
             enableJsonResponse: true,
-            ...(config.mcpAllowedHosts.length ? { enableDnsRebindingProtection: true, allowedHosts: config.mcpAllowedHosts } : {})
+            ...(config.allowedHosts.length ? { enableDnsRebindingProtection: true, allowedHosts: config.allowedHosts } : {})
         });
         res.on('close', () => {
             transport.close().catch(() => undefined);

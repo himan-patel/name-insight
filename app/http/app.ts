@@ -14,6 +14,7 @@ import { Routes } from './routes/index';
 import { openApiSpec } from './docs/openapi';
 import { SuggestionsFailedError, SuggestionsUnavailableError, ValidationError } from '../core';
 import { HttpError } from './http-error';
+import { hostGuard } from './host-guard';
 import { lifecycle } from './lifecycle';
 import { mcpRouter } from './mcp-route';
 import { limitConcurrentRequests } from './request-guards';
@@ -29,6 +30,9 @@ export function createApp(): express.Application {
     if (config.trustProxyHops > 0) {
         app.set('trust proxy', config.trustProxyHops);
     }
+
+    // DNS-rebinding protection (Host header allow-list; localhost names only on a loopback bind)
+    app.use(hostGuard);
 
     // security headers (also removes X-Powered-By)
     app.use(helmet());
