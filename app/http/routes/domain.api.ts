@@ -3,11 +3,10 @@ import * as express from 'express';
 import multer from 'multer';
 
 // Internal
-import * as config from '../config/global.config';
-import { ExtractionType } from './../models/enums/extraction-type.enum';
-import { HttpError } from '../models/http-error';
-import { DomainService } from '../services/domain.service';
-import { normalizeDomain, normalizeDomainList } from '../services/domain-validation';
+import * as config from '../../config/global.config';
+import { ExtractionType } from './extraction-type.enum';
+import { HttpError } from '../http-error';
+import { DomainService, normalizeDomain, normalizeDomainList } from '../../core';
 
 // Files are kept in memory (never written to disk) and capped in size
 const upload = multer({

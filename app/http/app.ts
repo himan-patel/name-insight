@@ -9,10 +9,11 @@ import * as swaggerUi from 'swagger-ui-express';
 // Private
 
 // Internal
-import * as config from './config/global.config';
+import * as config from '../config/global.config';
 import { Routes } from './routes/index';
 import { openApiSpec } from './docs/openapi';
-import { HttpError } from './models/http-error';
+import { ValidationError } from '../core';
+import { HttpError } from './http-error';
 
 /**
  * Builds the Express application: security middleware, API docs, rate limiting, routes and error handling.
@@ -72,6 +73,9 @@ export function createApp(): express.Application {
     app.use((error: unknown, req: express.Request, res: express.Response, _next: express.NextFunction) => {
         if (error instanceof HttpError) {
             return res.status(error.status).json({ error: error.message, details: error.details });
+        }
+        if (error instanceof ValidationError) {
+            return res.status(400).json({ error: error.message, details: error.details });
         }
         // other client errors from Express itself (malformed JSON, body too large, bad URL encoding)
         const expressError = (error ?? {}) as { status?: number, statusCode?: number, expose?: boolean, message?: string };

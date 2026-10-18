@@ -1,10 +1,10 @@
 import { fakeResolver, FakeRecords } from './helpers/fake-dns';
 
 let records: FakeRecords = {};
-jest.mock('../app/services/dns-resolver', () => ({
+jest.mock('../app/core/dns', () => ({
     createResolver: () => fakeResolver(records)
 }));
-jest.mock('../app/services/whois.client', () => ({
+jest.mock('../app/core/whois', () => ({
     whoisLookup: jest.fn()
 }));
 jest.mock('ping', () => ({
@@ -12,8 +12,8 @@ jest.mock('ping', () => ({
 }));
 
 import * as ping from 'ping';
-import { DomainService } from '../app/services/domain.service';
-import { whoisLookup } from '../app/services/whois.client';
+import { DomainService } from '../app/core/domain-service';
+import { whoisLookup } from '../app/core/whois';
 
 const probe = ping.promise.probe as jest.Mock;
 const whois = whoisLookup as jest.Mock;

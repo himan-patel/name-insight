@@ -50,7 +50,7 @@ gitleaks.
 - **Validate all external input** at the boundary, and never pass user input to a shell or subprocess
   argument without strict validation.
 - **Don't probe private networks.** Any new outbound request must go through the existing public-address
-  checks (see `app/services/domain-validation.ts`).
+  checks (see `app/core/validation.ts`).
 - Keep the OpenAPI spec and README in sync with behavior changes.
 
 ## Reporting security issues

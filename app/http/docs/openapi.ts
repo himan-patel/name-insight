@@ -1,9 +1,9 @@
 // Internal
-import * as config from '../config/global.config';
+import * as config from '../../config/global.config';
 
 /**
  * OpenAPI 3.0 spec for the NameInsight API, served by Swagger UI at /api-docs.
- * Keep this in sync with app/routes/domain.api.ts when endpoints change.
+ * Keep this in sync with app/http/routes/domain.api.ts when endpoints change.
  */
 
 const availableExample = {
