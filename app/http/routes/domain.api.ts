@@ -8,7 +8,10 @@ import { ExtractionType } from './extraction-type.enum';
 import { clientIp } from '../client-ip';
 import { HttpError } from '../http-error';
 import { FixedWindowBudget } from '../../utils/fixed-window-budget';
-import { DomainService, LookupOptions, normalizeDomain, normalizeDomainList } from '../../core';
+import {
+    createClaudeGenerator, DomainService, LookupOptions, MAX_SUGGESTION_LOOKUPS, normalizeDomain, normalizeDomainList,
+    normalizeSuggestionRequest, suggestDomains, SuggestionsUnavailableError
+} from '../../core';
 
 // Files are kept in memory (never written to disk) and capped in size
 const upload = multer({
@@ -78,6 +81,7 @@ export class DomainRoutes {
         router.get('/api/v1/domains/info/:domain', (req, res, next) => this.getInfoSingle(req, res, next));
         router.post('/api/v1/domains/info/_file', handleUpload, (req, res, next) => this.getInfoBulk(req, res, next, ExtractionType.FILE));
         router.post('/api/v1/domains/info/_payload', (req, res, next) => this.getInfoBulk(req, res, next, ExtractionType.PAYLOAD));
+        router.post('/api/v1/domains/suggest', (req, res, next) => this.suggest(req, res, next));
 
         return router;
     }
@@ -117,6 +121,21 @@ export class DomainRoutes {
             const options = lookupOptions(req);
             chargeLookups(req, res, domains.length);
             res.status(200).json(await this._domainService.getDomainInfoBulk(domains, options));
+        } catch (error) {
+            next(error);
+        }
+    }
+
+
+    async suggest(req: express.Request, res: express.Response, next: express.NextFunction) {
+        try {
+            const request = normalizeSuggestionRequest(req.body);
+            if (!config.claudeApiConfigured) {
+                throw new SuggestionsUnavailableError();
+            }
+            const maxLookups = Math.min(MAX_SUGGESTION_LOOKUPS, config.lookupBudgetMax);
+            chargeLookups(req, res, Math.min(request.count * request.tlds.length, maxLookups));
+            res.status(200).json(await suggestDomains(request, createClaudeGenerator(), this._domainService, 'claude-api', maxLookups));
         } catch (error) {
             next(error);
         }

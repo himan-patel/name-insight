@@ -142,6 +142,7 @@ export type ProbeSkipReason = typeof PROBE_SKIP_REASONS[number];
 export type RdapResult = z.infer<typeof RdapResultSchema>;
 export type WebCheck = z.infer<typeof WebCheckSchema>;
 export type Insights = z.infer<typeof InsightsSchema>;
+export type DomainStatus = typeof DOMAIN_STATUSES[number];
 export type Registration = z.infer<typeof RegistrationSchema>;
 export type Assessment = z.infer<typeof AssessmentSchema>;
 export type DomainInfo = z.infer<typeof DomainInfoSchema>;

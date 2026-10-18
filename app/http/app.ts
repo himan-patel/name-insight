@@ -12,7 +12,7 @@ import * as swaggerUi from 'swagger-ui-express';
 import * as config from '../config/global.config';
 import { Routes } from './routes/index';
 import { openApiSpec } from './docs/openapi';
-import { ValidationError } from '../core';
+import { SuggestionsFailedError, SuggestionsUnavailableError, ValidationError } from '../core';
 import { HttpError } from './http-error';
 import { lifecycle } from './lifecycle';
 
@@ -70,6 +70,15 @@ export function createApp(): express.Application {
     app.get('/api-docs.json', (req, res) => res.json(openApiSpec));
     app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(openApiSpec, { customSiteTitle: `${config.appName} API docs` }));
 
+    // stricter per-IP limit for AI suggestions, since each one calls a paid model
+    app.use('/api/v1/domains/suggest', rateLimit({
+        windowMs: config.rateLimitWindowMs,
+        limit: config.suggestRateLimitMax,
+        standardHeaders: false,
+        legacyHeaders: false,
+        message: { error: 'Too many suggestion requests, please try again later.' }
+    }));
+
     // per-IP request limit on the public API (each request triggers outbound DNS, RDAP, WHOIS and ping)
     app.use('/api/', rateLimit({
         windowMs: config.rateLimitWindowMs,
@@ -93,6 +102,12 @@ export function createApp(): express.Application {
         }
         if (error instanceof ValidationError) {
             return res.status(400).json({ error: error.message, details: error.details });
+        }
+        if (error instanceof SuggestionsUnavailableError) {
+            return res.status(503).json({ error: error.message });
+        }
+        if (error instanceof SuggestionsFailedError) {
+            return res.status(error.status).json({ error: error.message });
         }
         // other client errors from Express itself (malformed JSON, body too large, bad URL encoding)
         const expressError = (error ?? {}) as { status?: number, statusCode?: number, expose?: boolean, message?: string };

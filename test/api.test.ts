@@ -190,7 +190,8 @@ describe('app-wide behavior', () => {
             '/healthz',
             '/api/v1/domains/info/{domain}',
             '/api/v1/domains/info/_payload',
-            '/api/v1/domains/info/_file'
+            '/api/v1/domains/info/_file',
+            '/api/v1/domains/suggest'
         ]);
     });
 });

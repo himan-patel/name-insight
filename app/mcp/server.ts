@@ -7,7 +7,9 @@ import { z } from 'zod';
 import * as config from '../config/global.config';
 import {
     DnsResultSchema, DomainInfo, DomainNameSchema, DomainService, InsightsSchema, normalizeDomain, normalizeDomainList,
-    RegistrationSchema, ValidationError, DOMAIN_STATUSES, CONFIDENCE_LEVELS
+    RegistrationSchema, ValidationError, DOMAIN_STATUSES, CONFIDENCE_LEVELS, buildPrompt, createClaudeGenerator, NameGenerator,
+    normalizeSuggestionRequest, parseIdeas, suggestDomains, SuggestionRequestSchema, SuggestionResultSchema,
+    SuggestionsFailedError, SuggestionsUnavailableError
 } from '../core';
 import { errorMessage } from '../utils/async';
 import { version } from './version';
@@ -69,6 +71,9 @@ function ok<T extends Record<string, unknown>>(summary: string, structured: T): 
 
 /** Invalid input comes back as a tool error the model can read and correct, not a protocol error. */
 function toolError(error: unknown): CallToolResult {
+    if (error instanceof SuggestionsUnavailableError || error instanceof SuggestionsFailedError) {
+        return { isError: true, content: [{ type: 'text', text: error.message }] };
+    }
     if (error instanceof ValidationError) {
         const details = error.details ? ` ${JSON.stringify(error.details)}` : '';
         return { isError: true, content: [{ type: 'text', text: `${error.message}${details}` }] };
@@ -82,7 +87,30 @@ const readOnlyAnnotations = { readOnlyHint: true, idempotentHint: true, openWorl
 /**
  * Builds the NameInsight MCP server. Transport-agnostic: connect it to stdio (local clients) or Streamable HTTP.
  */
-export function createMcpServer(service: DomainService = new DomainService()): McpServer {
+export interface McpServerOptions {
+    /** Claude API generator used when the client can't sample; defaults to one that needs ANTHROPIC_API_KEY. */
+    claudeGenerator?: NameGenerator;
+    claudeConfigured?: boolean;
+}
+
+/** Name generator that asks the MCP client's own model (sampling), so no API key is needed on the server. */
+function samplingGenerator(server: McpServer): NameGenerator {
+    return async request => {
+        const { system, user } = buildPrompt(request);
+        const result = await server.server.createMessage({
+            systemPrompt: system,
+            messages: [{ role: 'user', content: { type: 'text', text: user } }],
+            maxTokens: 4000
+        });
+        const blocks = Array.isArray(result.content) ? result.content : [result.content];
+        const text = blocks.map(block => (block.type === 'text' ? block.text : '')).join('');
+        return parseIdeas(text);
+    };
+}
+
+export function createMcpServer(service: DomainService = new DomainService(), options: McpServerOptions = {}): McpServer {
+    const claudeGenerator = options.claudeGenerator ?? createClaudeGenerator();
+    const claudeConfigured = options.claudeConfigured ?? config.claudeApiConfigured;
     const server = new McpServer(
         { name: 'nameinsight', title: config.appName, version },
         {
@@ -169,6 +197,35 @@ export function createMcpServer(service: DomainService = new DomainService()): M
             const summary = `${label}: ${available.length ? `available as ${available.join(', ')}` : 'not available on the checked TLDs'}\n` +
                 results.map(summaryLine).join('\n');
             return ok(summary, { name: label, available, results });
+        } catch (error) {
+            return toolError(error);
+        }
+    });
+
+    server.registerTool('suggest_domains', {
+        title: 'Suggest available domain names',
+        description: 'Brainstorms brandable names for a business or project, then checks each across TLDs and ranks them by ' +
+            'real availability. Uses your own model through MCP sampling when supported, otherwise the server\'s Claude API key.',
+        inputSchema: SuggestionRequestSchema.shape,
+        outputSchema: SuggestionResultSchema,
+        annotations: { readOnlyHint: true, idempotentHint: false, openWorldHint: true }
+    }, async args => {
+        try {
+            const request = normalizeSuggestionRequest(args);
+            const canSample = Boolean(server.server.getClientCapabilities()?.sampling);
+            let result;
+            if (canSample) {
+                result = await suggestDomains(request, samplingGenerator(server), service, 'mcp-sampling');
+            } else if (claudeConfigured) {
+                result = await suggestDomains(request, claudeGenerator, service, 'claude-api');
+            } else {
+                throw new SuggestionsUnavailableError('This MCP client does not support sampling and the server has no Claude API ' +
+                    'key configured. Use check_name_across_tlds with names you choose instead.');
+            }
+            const summary = result.suggestions.map(suggestion =>
+                `${suggestion.name}: ${suggestion.available.length ? `available as ${suggestion.available.join(', ')}` : 'no checked TLD available'}` +
+                ` (${suggestion.rationale})`).join('\n');
+            return ok(summary || 'No suggestions', result);
         } catch (error) {
             return toolError(error);
         }

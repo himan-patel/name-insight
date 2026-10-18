@@ -6,3 +6,5 @@ export { isPublicAddress, normalizeDomain, normalizeDomainList, registrableDomai
 export { DomainService } from './domain-service';
 export type { LookupOptions } from './domain-service';
 export * from './schemas';
+export * from './suggestions';
+export { createClaudeGenerator } from './claude-generator';
