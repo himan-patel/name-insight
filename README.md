@@ -2,10 +2,43 @@
 
 [![CI](https://github.com/himan-patel/name-insight/actions/workflows/ci.yml/badge.svg)](https://github.com/himan-patel/name-insight/actions/workflows/ci.yml)
 
-**NameInsight** looks up domain names and estimates whether they are available to register. It's a small
-Express + TypeScript REST service.
+**AI-powered domain name discovery.** Generate brandable names, check availability across TLDs, and get rich
+insights (registry data, DNS, expiry, parking, email and TLS setup), as an **MCP server** for AI assistants or as a
+**REST API**.
 
-For each domain it:
+## Features
+
+- **Authoritative availability:** registry data over **RDAP** (with **WHOIS** fallback and parsing for TLDs without RDAP),
+  plus DNS and ping signals, combined into a `status` (`available`, `registered`, `parked`, `expiring`, `unknown`)
+  with a `confidence` level and plain-English `reasons`.
+- **Registration facts:** creation and expiry dates, domain age, days until expiry, registrar, EPP status and nameservers.
+  Subdomains are looked up via their registrable domain (Public Suffix List).
+- **Insights** (`?insights=true`): nameservers, email setup (MX, SPF, DMARC policy) and an HTTPS/TLS certificate check.
+- **AI name suggestions:** brainstorm names for a business, then verify every one across TLDs with real lookups and
+  rank by availability.
+- **MCP server:** `check_domain`, `check_domains`, `check_name_across_tlds` and `suggest_domains`, locally over stdio or
+  hosted over Streamable HTTP.
+- **Built for a public deployment:** no authentication required. Abuse is limited by per-IP rate limits and lookup budgets,
+  size and time limits on everything, and strict protection against reaching private networks (SSRF).
+
+## Quick start
+
+```bash
+npm install && npm run build
+npm start                     # REST API + hosted MCP on http://127.0.0.1:8080 (Swagger at /api-docs)
+npm run start:mcp             # MCP server over stdio for local AI clients
+```
+
+```bash
+curl http://127.0.0.1:8080/api/v1/domains/info/example.com
+claude mcp add nameinsight -- node "$PWD/dist/app/mcp/stdio.js"
+```
+
+Then ask your assistant: *"Is nameinsight available as a .com or .io?"*
+
+## How it works
+
+For each domain NameInsight:
 
 1. **Resolves** its A and AAAA records in DNS.
 2. Queries the registry over **RDAP** (registration status, dates, registrar, nameservers, DNSSEC), using IANA's
@@ -333,9 +366,26 @@ deterministic. HTTP behavior is tested with [supertest](https://github.com/ladjs
   limits apply to real client IPs.
 - **Rate limits and lookup budgets are per process and in memory.** They reset on restart, and N instances allow
   N times the limits.
-  The lookup budget (`LOOKUP_BUDGET_MAX`) additionally caps domains per client per window.
 - **WHOIS servers rate-limit heavy use.** Large or frequent bulk requests may start getting `whoisError` results.
-- **`available` is an estimate** (see the note at the top).
+- **Confidence varies by TLD.** With RDAP or a clear WHOIS answer, `status` is authoritative (`high`). Some registries
+  offer neither, and then the answer is an estimate (`medium` or `low`); check `confidence` before relying on it.
+- **Parking detection is a heuristic** based on a list of known parking and marketplace nameservers.
+
+## Status and roadmap
+
+**Shipped:** RDAP and WHOIS registry data with availability status and confidence, registration facts, subdomain
+handling, DNS, email and TLS insights, AI name suggestions (Claude API and MCP sampling), MCP server (stdio and hosted
+HTTP), zod-generated OpenAPI docs, per-IP abuse limits, graceful shutdown and health checks, and CI with secret scanning.
+
+**Ideas under consideration** (not yet planned or promised):
+
+- Container image and a deployment guide
+- Shared rate-limit and budget storage (e.g. Redis) for multi-instance deployments
+- Short-lived caching of lookup results
+- Trademark and look-alike checks for suggested names
+- A small web UI
+
+Suggestions and contributions are welcome; see below.
 
 ## Contributing and security
 

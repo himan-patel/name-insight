@@ -1,7 +1,23 @@
 {
   "name": "nameinsight",
   "version": "1.0.1",
-  "description": "NameInsight: look up domain names and estimate whether they are available to register",
+  "description": "AI-powered domain name discovery: availability across TLDs, registry insights (RDAP/WHOIS, DNS, expiry, parking) via MCP server or REST API",
+  "keywords": [
+    "domain",
+    "domain-availability",
+    "rdap",
+    "whois",
+    "dns",
+    "mcp",
+    "mcp-server",
+    "ai",
+    "domain-names"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/himan-patel/name-insight.git"
+  },
+  "homepage": "https://github.com/himan-patel/name-insight#readme",
   "main": "dist/app/index.js",
   "bin": {
     "nameinsight-mcp": "dist/app/mcp/stdio.js"
