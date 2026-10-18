@@ -54,6 +54,12 @@ gitleaks.
 - Change request/response shapes in `app/core/schemas.ts` (the OpenAPI spec is generated from it), and keep
   the README in sync with behavior changes.
 
+## Dependencies
+
+New or upgraded dependencies must have been published for at least two weeks (supply-chain safety). After changing
+dependencies, run `npm run deps:age` to check the whole production tree, including transitive packages, and pin
+anything too new with `overrides` in `package.json`. Dependabot is configured with the same 14-day cooldown.
+
 ## Reporting security issues
 
 See [SECURITY.md](SECURITY.md). Please don't open public issues for vulnerabilities.
