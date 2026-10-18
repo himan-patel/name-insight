@@ -82,6 +82,6 @@ describe('generated OpenAPI spec', () => {
 
     it('marks every DomainInfo field the API always returns as required', () => {
         const info = openApiSpec.components?.schemas?.DomainInfo as { required: string[] };
-        expect(info.required.sort()).toEqual(['available', 'dns', 'domain', 'probe', 'whois']);
+        expect(info.required.sort()).toEqual(['available', 'dns', 'domain', 'probe', 'rdap', 'whois']);
     });
 });

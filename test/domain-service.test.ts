@@ -126,3 +126,26 @@ describe('DomainService.parseDomainFile', () => {
         expect(service.parseDomainFile(file)).toEqual(['example.com', 'spaced.com', 'last.com']);
     });
 });
+
+describe('DomainService with RDAP', () => {
+    const rdapWith = (result: object) => ({ lookup: jest.fn(async () => result) }) as unknown as import('../app/core/rdap').RdapClient;
+
+    it('treats the registry saying "not registered" as authoritative', async () => {
+        const info = await new DomainService(rdapWith({ registered: false, server: 'rdap.verisign.com' })).getDomainInfo('free.com');
+        expect(info.available).toBe(true);
+        expect(info.rdap).toEqual({ registered: false, server: 'rdap.verisign.com' });
+    });
+
+    it('reports a registered domain as taken even with no DNS records or ping reply', async () => {
+        const info = await new DomainService(rdapWith({ registered: true, server: 'rdap.example' })).getDomainInfo('parked-no-dns.com');
+        expect(info.dns.addresses).toEqual([]);
+        expect(info.probe.alive).toBe(false);
+        expect(info.available).toBe(false);
+    });
+
+    it('falls back to the DNS/ping estimate when RDAP is unavailable', async () => {
+        const info = await new DomainService(rdapWith({ registered: null, error: 'RDAP not available for this TLD' })).getDomainInfo('x.io');
+        expect(info.available).toBe(true);
+        expect(info.rdap.error).toBe('RDAP not available for this TLD');
+    });
+});

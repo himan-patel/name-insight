@@ -46,15 +46,34 @@ export const PingProbeSchema = z.object({
         .describe('Why no ping result is available (present only when no ping was sent or it failed)')
 }).describe('Ping result. Fields are "unknown" when no reply was received or no ping was sent.');
 
+export const RDAP_ERRORS = ['RDAP not available for this TLD', 'RDAP lookup timed out', 'RDAP lookup failed'] as const;
+
+export const RdapResultSchema = z.object({
+    registered: z.boolean().nullable()
+        .describe('true: the registry has the domain. false: the registry says it is not registered. null: unknown (see `error`).'),
+    registrar: z.string().optional(),
+    registrarIanaId: z.string().optional(),
+    status: z.array(z.string()).optional().describe('EPP status values, e.g. "client transfer prohibited", "redemption period"'),
+    created: z.string().optional().describe('Registration date (ISO 8601)'),
+    expires: z.string().optional().describe('Expiration date (ISO 8601)'),
+    updated: z.string().optional().describe('Last changed (ISO 8601)'),
+    nameservers: z.array(z.string()).optional(),
+    dnssec: z.boolean().optional().describe('Whether the delegation is DNSSEC-signed'),
+    server: z.string().optional().describe('RDAP server that answered'),
+    error: z.enum(RDAP_ERRORS).optional()
+}).describe('Registration data from the registry over RDAP (the structured successor to WHOIS)');
+
 export const DomainInfoSchema = z.object({
     probe: PingProbeSchema,
     dns: DnsResultSchema,
+    rdap: RdapResultSchema,
     whois: z.string().nullable()
         .describe("Raw WHOIS text: the registrar's response, or the registry's if the registrar lookup failed. Truncated at " +
             `${config.maxWhoisResponseBytes / 1024} KB. null if WHOIS failed.`),
     whoisError: z.enum(WHOIS_ERRORS).optional().describe('Present only when `whois` is null'),
     available: z.boolean()
-        .describe('true when DNS has no A/AAAA records and nothing answers the ping (an estimate; see the API description)'),
+        .describe('Authoritative from RDAP when the registry answers (`rdap.registered`); otherwise an estimate: true when DNS has ' +
+            'no A/AAAA records and nothing answers the ping.'),
     domain: z.string().describe('Normalized domain (lowercase, punycode)')
 });
 
@@ -67,4 +86,5 @@ export type DomainsPayload = z.infer<typeof DomainsPayloadSchema>;
 export type DnsResult = z.infer<typeof DnsResultSchema>;
 export type PingProbe = z.infer<typeof PingProbeSchema>;
 export type ProbeSkipReason = typeof PROBE_SKIP_REASONS[number];
+export type RdapResult = z.infer<typeof RdapResultSchema>;
 export type DomainInfo = z.infer<typeof DomainInfoSchema>;

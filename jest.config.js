@@ -6,6 +6,7 @@ module.exports = {
         '^.+\\.ts$': ['ts-jest', { tsconfig: 'tsconfig.test.json' }]
     },
     setupFiles: ['<rootDir>/test/setup-env.ts'],
+    setupFilesAfterEnv: ['<rootDir>/test/setup-mocks.ts'],
     collectCoverageFrom: ['app/**/*.ts', '!app/index.ts'],
     clearMocks: true,
     restoreMocks: true
