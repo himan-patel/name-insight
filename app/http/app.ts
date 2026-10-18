@@ -14,6 +14,7 @@ import { Routes } from './routes/index';
 import { openApiSpec } from './docs/openapi';
 import { ValidationError } from '../core';
 import { HttpError } from './http-error';
+import { lifecycle } from './lifecycle';
 
 /**
  * Builds the Express application: security middleware, API docs, rate limiting, routes and error handling.
@@ -48,6 +49,22 @@ export function createApp(): express.Application {
             ].join(' ');
         }));
     }
+
+    // while shutting down, ask clients to drop keep-alive connections so the server can close promptly
+    app.use((req, res, next) => {
+        if (lifecycle.isShuttingDown()) {
+            res.set('Connection', 'close');
+        }
+        next();
+    });
+
+    // health check for load balancers and orchestrators: 503 once shutdown has started
+    app.get('/healthz', (req, res) => {
+        if (lifecycle.isShuttingDown()) {
+            return res.status(503).json({ status: 'shutting-down' });
+        }
+        res.json({ status: 'ok' });
+    });
 
     // API docs: Swagger UI at /api-docs, raw spec at /api-docs.json
     app.get('/api-docs.json', (req, res) => res.json(openApiSpec));
