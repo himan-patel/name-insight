@@ -7,10 +7,16 @@ import * as config from '../config/global.config';
 import { createResolver } from './dns';
 import { isPublicAddress } from './validation';
 import { assessAvailability } from './availability';
+import { getInsights } from './insights';
 import { rdapClient, RdapClient } from './rdap';
 import { parseWhois } from './whois-parse';
 import { whoisLookup } from './whois';
-import type { DnsResult, DomainInfo, PingProbe, ProbeSkipReason } from './schemas';
+import type { DnsResult, DomainInfo, Insights, PingProbe, ProbeSkipReason } from './schemas';
+
+export interface LookupOptions {
+  /** Also collect nameservers, email setup and an HTTPS/TLS check (slower). */
+  insights?: boolean;
+}
 import { errorMessage, mapWithConcurrency, Semaphore, withTimeout } from '../utils/async';
 
 /** DNS errors meaning "this name has no records", as opposed to a lookup failure. */
@@ -28,7 +34,7 @@ export class DomainService {
    * Never throws for lookup failures; they are reported in the result instead.
    * @param domain normalized domain from `normalizeDomain`
    */
-  async getDomainInfo(domain: string): Promise<DomainInfo> {
+  async getDomainInfo(domain: string, options: LookupOptions = {}): Promise<DomainInfo> {
     return lookupSlots.run(async () => {
       const [resolved, rdap, whoisResult] = await Promise.all([
         this.resolveDomain(domain),
@@ -46,7 +52,14 @@ export class DomainService {
         dnsResult.error = resolved.error;
       }
 
-      const assessment = assessAvailability({ rdap, whois: parseWhois(whoisResult.whois), dns: dnsResult, probe });
+      let insights: Insights | undefined;
+      if (options.insights) {
+        insights = await getInsights(domain, publicAddresses.length > 0 && !dnsResult.nonPublic);
+      }
+
+      const assessment = assessAvailability({
+        rdap, whois: parseWhois(whoisResult.whois), dns: dnsResult, probe, dnsNameservers: insights?.nameservers
+      });
 
       return {
         domain,
@@ -55,14 +68,15 @@ export class DomainService {
         probe,
         dns: dnsResult,
         rdap,
-        ...whoisResult
+        ...whoisResult,
+        ...(insights ? { insights } : {})
       };
     });
   }
 
   /** Looks up several validated domains, a few at a time, keeping input order. */
-  async getDomainInfoBulk(domains: string[]): Promise<DomainInfo[]> {
-    return mapWithConcurrency(domains, config.lookupConcurrency, domain => this.getDomainInfo(domain));
+  async getDomainInfoBulk(domains: string[], options: LookupOptions = {}): Promise<DomainInfo[]> {
+    return mapWithConcurrency(domains, config.lookupConcurrency, domain => this.getDomainInfo(domain, options));
   }
 
   /**

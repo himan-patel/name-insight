@@ -25,6 +25,8 @@ export interface AssessmentInput {
     whois: ParsedWhois;
     dns: DnsResult;
     probe: PingProbe;
+    /** Nameservers from DNS (insights), used for parking detection when the registry data has none. */
+    dnsNameservers?: string[];
     now?: number;
 }
 
@@ -116,7 +118,7 @@ export function assessAvailability(input: AssessmentInput): Assessment {
             : `Expires in ${registration.daysUntilExpiry} days`);
         return { status: 'expiring', confidence, registration, reasons };
     }
-    const provider = parkingProvider(registration.nameservers);
+    const provider = parkingProvider(registration.nameservers ?? input.dnsNameservers);
     if (provider) {
         reasons.push(`Nameservers point to a parking/marketplace service (${provider}); it may be for sale`);
         return { status: 'parked', confidence, registration, reasons };

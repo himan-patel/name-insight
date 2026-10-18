@@ -128,6 +128,12 @@ const bulkSuccess: ResponseConfig = {
 
 const HealthSchema = z.object({ status: z.enum(['ok', 'shutting-down']) });
 
+/** Optional `insights` flag shared by the lookup endpoints. */
+const InsightsQuery = z.object({
+    insights: z.enum(['true', 'false']).optional()
+        .describe('Also return nameservers, email setup (MX/SPF/DMARC) and an HTTPS/TLS check. Slower; default false.')
+});
+
 registry.registerPath({
     method: 'get',
     path: '/healthz',
@@ -147,7 +153,7 @@ registry.registerPath({
     tags: ['Domains'],
     summary: 'Look up a single domain',
     operationId: 'getDomainInfo',
-    request: { params: z.object({ domain: DomainNameSchema.meta({ example: 'example.com' }) }) },
+    request: { params: z.object({ domain: DomainNameSchema.meta({ example: 'example.com' }) }), query: InsightsQuery },
     responses: {
         200: {
             description: 'DNS, ping and WHOIS result for the domain',
@@ -177,6 +183,7 @@ registry.registerPath({
     summary: 'Look up multiple domains from a JSON body',
     operationId: 'getDomainInfoBulkPayload',
     request: {
+        query: InsightsQuery,
         body: {
             required: true,
             description: `JSON body, at most ${config.maxBodyBytes / 1024} KB`,
@@ -209,6 +216,7 @@ registry.registerPath({
     ].join(' '),
     operationId: 'getDomainInfoBulkFile',
     request: {
+        query: InsightsQuery,
         body: {
             required: true,
             content: {

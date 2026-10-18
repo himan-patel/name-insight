@@ -4,4 +4,5 @@
 export { ValidationError } from './errors';
 export { isPublicAddress, normalizeDomain, normalizeDomainList } from './validation';
 export { DomainService } from './domain-service';
+export type { LookupOptions } from './domain-service';
 export * from './schemas';
