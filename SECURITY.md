@@ -29,7 +29,7 @@ In scope, for example:
 
 - reaching private, loopback or link-local addresses (SSRF), including through DNS or WHOIS referrals
 - command or argument injection into `ping` or other subprocesses
-- bypassing input validation, body/upload size limits, rate limits, the lookup budget or API-key authentication
+- bypassing input validation, body/upload size limits, rate limits or the lookup budget
 - denial of service through a single request (memory, sockets, processes)
 - leaking secrets, internal addresses or stack traces in responses or logs
 
@@ -38,9 +38,9 @@ configuration, and the accuracy of third-party WHOIS/RDAP data.
 
 ## Operational notes
 
-- API keys are configured as SHA-256 digests and read at startup; revoking a key requires a restart.
+- NameInsight is a public tool with no authentication by design; abuse is limited per client IP.
 - Rate limits and lookup budgets are per process; multiple instances multiply them.
-- The server refuses to bind a non-loopback address without API keys unless `AUTH_DISABLED=true`.
+- Behind a load balancer, set `TRUST_PROXY_HOPS` so limits apply to real client IPs.
 
 ## Secrets
 

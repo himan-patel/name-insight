@@ -19,8 +19,7 @@
     "start:tsnode": "ts-node ./app/index.ts",
     "start-watch:tsnode": "node --watch --require ts-node/register ./app/index.ts",
     "inspect:tsnode": "node --inspect --require ts-node/register ./app/index.ts",
-    "prepare": "husky",
-    "generate-api-key": "node scripts/generate-api-key.mjs"
+    "prepare": "husky"
   },
   "author": "Himan Patel",
   "license": "MIT",
