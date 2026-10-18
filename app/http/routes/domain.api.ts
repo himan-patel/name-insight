@@ -6,6 +6,7 @@ import multer from 'multer';
 import * as config from '../../config/global.config';
 import { ExtractionType } from './extraction-type.enum';
 import { clientIp } from '../client-ip';
+import { requestSignal, requireJson } from '../request-guards';
 import { HttpError } from '../http-error';
 import { BudgetExceededError, chargeLookupBudget, chargeSuggestionBudget } from '../budgets';
 import {
@@ -80,8 +81,8 @@ export class DomainRoutes {
     register(router: express.Router) {
         router.get('/api/v1/domains/info/:domain', (req, res, next) => this.getInfoSingle(req, res, next));
         router.post('/api/v1/domains/info/_file', handleUpload, (req, res, next) => this.getInfoBulk(req, res, next, ExtractionType.FILE));
-        router.post('/api/v1/domains/info/_payload', (req, res, next) => this.getInfoBulk(req, res, next, ExtractionType.PAYLOAD));
-        router.post('/api/v1/domains/suggest', (req, res, next) => this.suggest(req, res, next));
+        router.post('/api/v1/domains/info/_payload', requireJson, (req, res, next) => this.getInfoBulk(req, res, next, ExtractionType.PAYLOAD));
+        router.post('/api/v1/domains/suggest', requireJson, (req, res, next) => this.suggest(req, res, next));
 
         return router;
     }
@@ -91,7 +92,7 @@ export class DomainRoutes {
             const domain = normalizeDomain(req.params.domain);
             const options = lookupOptions(req);
             chargeLookups(req, res, 1);
-            res.status(200).json(await this._domainService.getDomainInfo(domain, options));
+            res.status(200).json(await this._domainService.getDomainInfo(domain, { ...options, signal: requestSignal(res) }));
         } catch (error) {
             next(error);
         }
@@ -120,7 +121,7 @@ export class DomainRoutes {
             const domains = normalizeDomainList(rawDomains, config.maxDomainsPerRequest);
             const options = lookupOptions(req);
             chargeLookups(req, res, domains.length);
-            res.status(200).json(await this._domainService.getDomainInfoBulk(domains, options));
+            res.status(200).json(await this._domainService.getDomainInfoBulk(domains, { ...options, signal: requestSignal(res) }));
         } catch (error) {
             next(error);
         }
@@ -133,7 +134,10 @@ export class DomainRoutes {
             if (!config.claudeApiConfigured) {
                 throw new SuggestionsUnavailableError();
             }
-            // stricter per-IP limit for suggestions (each calls a paid model), shared with the hosted MCP endpoint
+            const maxLookups = Math.min(MAX_SUGGESTION_LOOKUPS, config.lookupBudgetMax);
+            chargeLookups(req, res, Math.min(request.count * request.tlds.length, maxLookups));
+            // stricter per-IP limit for suggestions (each calls a paid model), shared with the hosted MCP endpoint;
+            // charged after the lookup budget so a lookup-budget 429 doesn't burn a suggestion
             try {
                 chargeSuggestionBudget(clientIp(req));
             } catch (error) {
@@ -143,9 +147,7 @@ export class DomainRoutes {
                 }
                 throw error;
             }
-            const maxLookups = Math.min(MAX_SUGGESTION_LOOKUPS, config.lookupBudgetMax);
-            chargeLookups(req, res, Math.min(request.count * request.tlds.length, maxLookups));
-            res.status(200).json(await suggestDomains(request, createClaudeGenerator(), this._domainService, 'claude-api', maxLookups));
+            res.status(200).json(await suggestDomains(request, createClaudeGenerator(), this._domainService, 'claude-api', maxLookups, requestSignal(res)));
         } catch (error) {
             next(error);
         }

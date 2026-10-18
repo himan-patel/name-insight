@@ -4,13 +4,19 @@ import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 
 // Internal
 import * as config from '../config/global.config';
-import { errorMessage } from '../utils/async';
+import { errorMessage, QueueFullError, Semaphore } from '../utils/async';
+import { FixedWindowBudget } from '../utils/fixed-window-budget';
 import { buildPrompt, NameGenerator, NameIdeasSchema, SuggestionsFailedError, SuggestionsUnavailableError } from './suggestions';
 
 /** The subset of the Anthropic client this generator uses (lets tests pass a fake). */
 export type ClaudeClient = Pick<Anthropic, 'beta'>;
 
 let sharedClient: ClaudeClient | undefined;
+
+/** Process-wide caps on the server's Claude API usage, whatever transport the request came from. */
+const HOUR_MS = 60 * 60 * 1000;
+const globalSuggestionBudget = new FixedWindowBudget(config.globalSuggestMaxPerHour, HOUR_MS);
+const aiSlots = new Semaphore(config.maxConcurrentAiCalls, config.maxConcurrentAiCalls * 5);
 
 /**
  * Name generator backed by the Claude API. The Anthropic SDK reads ANTHROPIC_API_KEY from the environment; the key is
@@ -21,12 +27,16 @@ export function createClaudeGenerator(client?: ClaudeClient): NameGenerator {
         if (!client && !config.claudeApiConfigured) {
             throw new SuggestionsUnavailableError();
         }
-        const anthropic = client ?? (sharedClient ??= new Anthropic());
+        if (!globalSuggestionBudget.consume('global', 1).allowed) {
+            throw new SuggestionsFailedError('AI suggestions have reached this server\'s hourly limit; please try again later', 502);
+        }
+        // bounded timeout and retries keep a slow or failing upstream from tying up the server
+        const anthropic = client ?? (sharedClient ??= new Anthropic({ timeout: 30_000, maxRetries: 1 }));
         const { system, user } = buildPrompt(request);
 
         let response;
         try {
-            response = await anthropic.beta.messages.parse({
+            response = await aiSlots.run(() => anthropic.beta.messages.parse({
                 model: config.aiModel,
                 max_tokens: 4000,
                 system,
@@ -35,8 +45,11 @@ export function createClaudeGenerator(client?: ClaudeClient): NameGenerator {
                 // If the model declines, the API re-runs the request on a suitable fallback model
                 betas: ['server-side-fallback-2026-07-01'],
                 fallbacks: 'default'
-            });
+            }));
         } catch (error) {
+            if (error instanceof QueueFullError) {
+                throw new SuggestionsFailedError('The AI service is busy; please try again shortly', 502);
+            }
             if (error instanceof Anthropic.AuthenticationError || error instanceof Anthropic.PermissionDeniedError) {
                 console.error('ClaudeGenerator :: Claude API rejected the configured credentials');
                 throw new SuggestionsUnavailableError('AI suggestions are temporarily unavailable');

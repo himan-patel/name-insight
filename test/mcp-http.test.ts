@@ -14,6 +14,8 @@ jest.mock('../app/core/dns', () => ({
 }));
 jest.mock('../app/core/whois', () => ({ whoisLookup: jest.fn(async (d: string) => `No match for domain "${d}".`) }));
 jest.mock('ping', () => ({ promise: { probe: jest.fn() } }));
+// the Claude generator is mocked: nothing is sent to any AI service
+jest.mock('../app/core/claude-generator', () => ({ createClaudeGenerator: () => async () => [{ name: 'freebrew', rationale: 'fresh' }] }));
 
 /** Fresh app (and fresh budgets) with the given env. */
 function appWith(env: Record<string, string>) {
@@ -78,12 +80,25 @@ describe('hosted MCP endpoint (Streamable HTTP, stateless, public)', () => {
         await client.close();
     });
 
-    it('limits suggestion calls per IP', async () => {
-        const { client } = await connect({ SUGGEST_RATE_LIMIT_MAX: '1' });
-        await client.callTool({ name: 'suggest_domains', arguments: { description: 'coffee' } });
-        const result = await client.callTool({ name: 'suggest_domains', arguments: { description: 'tea' } }) as CallToolResult;
-        expect(text(result)).toMatch(/^Too many suggestion requests/);
+    it('limits suggestion calls per IP, without charging calls that cannot run', async () => {
+        // placeholder value only marks the key as configured; the generator is mocked
+        const { client } = await connect({ SUGGEST_RATE_LIMIT_MAX: '1', ANTHROPIC_API_KEY: 'placeholder-for-tests' });
+        const first = await client.callTool({ name: 'suggest_domains', arguments: { description: 'coffee', count: 1, tlds: ['com'] } }) as CallToolResult;
+        expect(first.structuredContent).toMatchObject({ generatedBy: 'claude-api', suggestions: [{ name: 'freebrew' }] });
+        const second = await client.callTool({ name: 'suggest_domains', arguments: { description: 'tea' } }) as CallToolResult;
+        expect(text(second)).toMatch(/^Too many suggestion requests/);
         await client.close();
+    });
+
+    it('rejects JSON-RPC batches', async () => {
+        const res = await request(appWith({})).post('/mcp').set('Accept', 'application/json, text/event-stream')
+            .send([{ jsonrpc: '2.0', id: 1, method: 'tools/list' }, { jsonrpc: '2.0', id: 2, method: 'tools/list' }]).expect(400);
+        expect(res.body.error).toEqual({ code: -32600, message: 'Batch requests are not supported' });
+    });
+
+    it('answers malformed JSON with a JSON-RPC parse error', async () => {
+        const res = await request(appWith({})).post('/mcp').set('Content-Type', 'application/json').send('{"jsonrpc":').expect(400);
+        expect(res.body).toEqual({ jsonrpc: '2.0', error: { code: -32700, message: 'Parse error' }, id: null });
     });
 
     it('rejects GET and DELETE with 405 (stateless, POST only)', async () => {

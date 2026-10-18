@@ -16,6 +16,8 @@ import type { DnsResult, DomainInfo, Insights, PingProbe, ProbeSkipReason } from
 export interface LookupOptions {
   /** Also collect nameservers, email setup and an HTTPS/TLS check (slower). */
   insights?: boolean;
+  /** Fires when the caller goes away; lookups that haven't started are skipped. */
+  signal?: AbortSignal;
 }
 import { errorMessage, mapWithConcurrency, Semaphore, withTimeout } from '../utils/async';
 
@@ -23,7 +25,7 @@ import { errorMessage, mapWithConcurrency, Semaphore, withTimeout } from '../uti
 const NO_RECORDS_CODES = ['ENOTFOUND', 'ENODATA'];
 
 /** Caps lookups in flight across all requests (each spawns a ping process and opens sockets). */
-const lookupSlots = new Semaphore(config.maxConcurrentLookups);
+const lookupSlots = new Semaphore(config.maxConcurrentLookups, config.maxQueuedLookups);
 
 export class DomainService {
 
@@ -75,12 +77,12 @@ export class DomainService {
         ...whoisResult,
         ...(insights ? { insights } : {})
       };
-    });
+    }, options.signal);
   }
 
   /** Looks up several validated domains, a few at a time, keeping input order. */
   async getDomainInfoBulk(domains: string[], options: LookupOptions = {}): Promise<DomainInfo[]> {
-    return mapWithConcurrency(domains, config.lookupConcurrency, domain => this.getDomainInfo(domain, options));
+    return mapWithConcurrency(domains, config.lookupConcurrency, domain => this.getDomainInfo(domain, options), options.signal);
   }
 
   /**

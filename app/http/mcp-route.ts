@@ -9,6 +9,7 @@ import { createMcpServer, ToolLimitError, ToolLimits } from '../mcp/server';
 import { errorMessage } from '../utils/async';
 import { BudgetExceededError, chargeLookupBudget, chargeSuggestionBudget } from './budgets';
 import { clientIp } from './client-ip';
+import { requestSignal } from './request-guards';
 
 /** Maps the shared per-IP budgets onto MCP tool limits for one caller. */
 function limitsFor(client: string): ToolLimits {
@@ -43,15 +44,19 @@ export function mcpRouter(service: DomainService = new DomainService()): express
     const router = express.Router();
 
     router.post('/mcp', async (req, res) => {
-        const server = createMcpServer(service, { limits: limitsFor(clientIp(req)) });
+        if (Array.isArray(req.body)) {
+            // batches would multiply the work allowed per rate-limited request
+            return res.status(400).json({ jsonrpc: '2.0', error: { code: -32600, message: 'Batch requests are not supported' }, id: null });
+        }
+        const server = createMcpServer(service, { limits: limitsFor(clientIp(req)), signal: requestSignal(res) });
         const transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: undefined,
             enableJsonResponse: true,
             ...(config.mcpAllowedHosts.length ? { enableDnsRebindingProtection: true, allowedHosts: config.mcpAllowedHosts } : {})
         });
         res.on('close', () => {
-            void transport.close();
-            void server.close();
+            transport.close().catch(() => undefined);
+            server.close().catch(() => undefined);
         });
         try {
             await server.connect(transport);

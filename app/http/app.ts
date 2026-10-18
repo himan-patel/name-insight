@@ -16,6 +16,8 @@ import { SuggestionsFailedError, SuggestionsUnavailableError, ValidationError } 
 import { HttpError } from './http-error';
 import { lifecycle } from './lifecycle';
 import { mcpRouter } from './mcp-route';
+import { limitConcurrentRequests } from './request-guards';
+import { AbortedError, QueueFullError } from '../utils/async';
 
 /**
  * Builds the Express application: security middleware, API docs, rate limiting, routes and error handling.
@@ -34,7 +36,7 @@ export function createApp(): express.Application {
     // allow cross-origin browser requests only from configured origins
     app.use(cors({ origin: config.corsOrigins.length ? config.corsOrigins : false }));
 
-    app.use(express.urlencoded({ extended: true, limit: config.maxBodyBytes, parameterLimit: 100 }));
+    // JSON only: form-encoded bodies would let any website trigger requests from its visitors' browsers
     app.use(express.json({ limit: config.maxBodyBytes }));
 
     // configure logging for REST requests
@@ -86,6 +88,9 @@ export function createApp(): express.Application {
         }
     }));
 
+    // per-client cap on requests in flight, so one client can't occupy all lookup capacity
+    app.use(['/api/', '/mcp'], limitConcurrentRequests);
+
     // public, stateless MCP endpoint (Streamable HTTP)
     app.use('/', mcpRouter());
 
@@ -104,6 +109,14 @@ export function createApp(): express.Application {
         if (error instanceof ValidationError) {
             return res.status(400).json({ error: error.message, details: error.details });
         }
+        if (error instanceof QueueFullError) {
+            res.set('Retry-After', '5');
+            return res.status(503).json({ error: 'Server is busy; please retry shortly' });
+        }
+        if (error instanceof AbortedError) {
+            // the client disconnected; nobody is listening for a response
+            return res.headersSent ? undefined : res.status(499).end();
+        }
         if (error instanceof SuggestionsUnavailableError) {
             return res.status(503).json({ error: error.message });
         }
@@ -114,6 +127,10 @@ export function createApp(): express.Application {
         const expressError = (error ?? {}) as { status?: number, statusCode?: number, expose?: boolean, message?: string };
         const status = expressError.status ?? expressError.statusCode ?? 500;
         if (status >= 400 && status < 500) {
+            if (req.baseUrl.toLowerCase() === '/mcp' || req.path.toLowerCase() === '/mcp') {
+                // MCP clients expect JSON-RPC errors (-32700: parse error)
+                return res.status(status).json({ jsonrpc: '2.0', error: { code: -32700, message: 'Parse error' }, id: null });
+            }
             // only messages flagged as safe are returned
             return res.status(status).json({ error: expressError.expose ? expressError.message : 'Bad request' });
         }
