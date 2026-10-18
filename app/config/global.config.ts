@@ -90,5 +90,8 @@ export const aiEffort = (AI_EFFORTS as readonly string[]).includes(process.env.A
     : 'medium';
 /** Suggestion requests allowed per client IP per rate-limit window (each one calls the AI model). */
 export const suggestRateLimitMax = intFromEnv('SUGGEST_RATE_LIMIT_MAX', 5, 1);
+
+/** Host headers accepted by the hosted MCP endpoint (enables DNS-rebinding protection), e.g. "mcp.example.com". */
+export const mcpAllowedHosts = listFromEnv('MCP_ALLOWED_HOSTS');
 export const webCheckTimeoutMs = intFromEnv('WEB_CHECK_TIMEOUT_MS', 5_000, 1);
 export const maxRdapResponseBytes = Math.max(1, intFromEnv('MAX_RDAP_RESPONSE_BYTES', 256 * 1024));

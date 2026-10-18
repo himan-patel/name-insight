@@ -120,7 +120,8 @@ all; copy it to `.env` (gitignored) and run with `node --env-file=.env ./dist/ap
 | `ANTHROPIC_API_KEY` | _(empty)_ | **Secret.** Enables REST AI suggestions (and the MCP fallback). Set only in the environment; never commit |
 | `AI_MODEL` | `claude-opus-5-5` | Claude model used for suggestions |
 | `AI_EFFORT` | `medium` | Effort level for suggestions (`low`, `medium`, `high`) |
-| `SUGGEST_RATE_LIMIT_MAX` | `5` | Suggestion requests per client IP per rate-limit window |
+| `SUGGEST_RATE_LIMIT_MAX` | `5` | Suggestion requests per client IP per rate-limit window (REST and MCP combined) |
+| `MCP_ALLOWED_HOSTS` | _(empty)_ | Comma-separated Host headers accepted by `POST /mcp`; enables DNS-rebinding protection |
 
 Numeric values must be non-negative integers; the app refuses to start otherwise.
 
@@ -181,6 +182,20 @@ claude mcp add nameinsight -- node /absolute/path/to/name-insight/dist/app/mcp/s
 | `check_name_across_tlds` | One name across TLDs (default `.com .net .org .io .ai .dev .app .co`, or your own list), listing which are available |
 | `suggest_domains` | Brainstorms names for a description (via MCP sampling, or the server's Claude API key), checks them across TLDs and ranks by availability |
 
+### Hosted (Streamable HTTP)
+
+The REST server also exposes a **public, stateless MCP endpoint** at `POST /mcp` (no API keys), so remote clients can
+connect without installing anything:
+
+```bash
+claude mcp add --transport http nameinsight https://your-host.example/mcp
+```
+
+Each request gets a fresh server, and tool calls draw on the same per-IP limits as the REST API (one shared request
+limit, lookup budget and suggestion limit). Over HTTP the server can't use client sampling, so `suggest_domains` needs
+`ANTHROPIC_API_KEY` on the server there. Set `MCP_ALLOWED_HOSTS` to your public hostname(s) to turn on DNS-rebinding
+protection. `GET` and `DELETE` return `405`.
+
 All tools are read-only. Results are compact (no raw WHOIS or ping output unless asked) and come with a typed
 `structuredContent` payload plus a one-line summary per domain. Invalid input returns a readable tool error. Logs go to
 stderr so they never interfere with the protocol on stdout.
@@ -211,6 +226,8 @@ schemas.
 | `POST` | `/api/v1/domains/info/_payload` | JSON body: `{ "domains": ["a.com", "b.com"] }` |
 | `POST` | `/api/v1/domains/info/_file` | `multipart/form-data` with a `file` field: a `text/plain` file, one domain per line |
 | `GET` | `/healthz` | Health check: `200 {"status":"ok"}`, or `503` once shutdown has started |
+| `POST` | `/api/v1/domains/suggest` | AI name suggestions, verified by real lookups (see [AI name suggestions](#ai-name-suggestions)) |
+| `POST` | `/mcp` | Hosted MCP endpoint (Streamable HTTP, JSON-RPC; see [MCP server](#mcp-server)) |
 
 The bulk endpoints return an array with one result per unique domain, in input order.
 
@@ -286,6 +303,8 @@ app/
 ├── mcp/                        # MCP server (tools) and stdio entry point
 ├── http/                       # REST API (Express)
 │   ├── app.ts                  # createApp(): middleware, Swagger mount, routes, error handling
+│   ├── mcp-route.ts            # Hosted stateless MCP endpoint (POST /mcp)
+│   ├── budgets.ts              # Per-IP lookup and suggestion budgets shared by REST and MCP
 │   ├── http-error.ts           # Error type carrying an HTTP status
 │   ├── docs/openapi.ts         # OpenAPI spec (generated from core schemas) served at /api-docs
 │   └── routes/                 # Route registration, domain endpoints, file uploads

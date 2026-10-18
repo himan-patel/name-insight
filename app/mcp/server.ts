@@ -9,7 +9,7 @@ import {
     DnsResultSchema, DomainInfo, DomainNameSchema, DomainService, InsightsSchema, normalizeDomain, normalizeDomainList,
     RegistrationSchema, ValidationError, DOMAIN_STATUSES, CONFIDENCE_LEVELS, buildPrompt, createClaudeGenerator, NameGenerator,
     normalizeSuggestionRequest, parseIdeas, suggestDomains, SuggestionRequestSchema, SuggestionResultSchema,
-    SuggestionsFailedError, SuggestionsUnavailableError
+    SuggestionsFailedError, SuggestionsUnavailableError, MAX_SUGGESTION_LOOKUPS
 } from '../core';
 import { errorMessage } from '../utils/async';
 import { version } from './version';
@@ -71,7 +71,7 @@ function ok<T extends Record<string, unknown>>(summary: string, structured: T): 
 
 /** Invalid input comes back as a tool error the model can read and correct, not a protocol error. */
 function toolError(error: unknown): CallToolResult {
-    if (error instanceof SuggestionsUnavailableError || error instanceof SuggestionsFailedError) {
+    if (error instanceof SuggestionsUnavailableError || error instanceof SuggestionsFailedError || error instanceof ToolLimitError) {
         return { isError: true, content: [{ type: 'text', text: error.message }] };
     }
     if (error instanceof ValidationError) {
@@ -87,7 +87,22 @@ const readOnlyAnnotations = { readOnlyHint: true, idempotentHint: true, openWorl
 /**
  * Builds the NameInsight MCP server. Transport-agnostic: connect it to stdio (local clients) or Streamable HTTP.
  */
+/** Thrown by a limit hook when the caller is over a budget; returned to the model as a tool error. */
+export class ToolLimitError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'ToolLimitError';
+    }
+}
+
+/** Per-caller limits for hosted deployments (the stdio server runs without them). Hooks throw ToolLimitError. */
+export interface ToolLimits {
+    lookups(count: number): void;
+    suggestion(): void;
+}
+
 export interface McpServerOptions {
+    limits?: ToolLimits;
     /** Claude API generator used when the client can't sample; defaults to one that needs ANTHROPIC_API_KEY. */
     claudeGenerator?: NameGenerator;
     claudeConfigured?: boolean;
@@ -111,6 +126,7 @@ function samplingGenerator(server: McpServer): NameGenerator {
 export function createMcpServer(service: DomainService = new DomainService(), options: McpServerOptions = {}): McpServer {
     const claudeGenerator = options.claudeGenerator ?? createClaudeGenerator();
     const claudeConfigured = options.claudeConfigured ?? config.claudeApiConfigured;
+    const limits = options.limits;
     const server = new McpServer(
         { name: 'nameinsight', title: config.appName, version },
         {
@@ -134,7 +150,9 @@ export function createMcpServer(service: DomainService = new DomainService(), op
         annotations: readOnlyAnnotations
     }, async ({ domain, insights, include_raw_whois }) => {
         try {
-            const info = await service.getDomainInfo(normalizeDomain(domain), { insights });
+            const normalized = normalizeDomain(domain);
+            limits?.lookups(1);
+            const info = await service.getDomainInfo(normalized, { insights });
             const result = compact(info, include_raw_whois);
             return ok(summaryLine(result), result);
         } catch (error) {
@@ -153,7 +171,9 @@ export function createMcpServer(service: DomainService = new DomainService(), op
         annotations: readOnlyAnnotations
     }, async ({ domains, insights }) => {
         try {
-            const infos = await service.getDomainInfoBulk(normalizeDomainList(domains, config.maxDomainsPerRequest), { insights });
+            const normalized = normalizeDomainList(domains, config.maxDomainsPerRequest);
+            limits?.lookups(normalized.length);
+            const infos = await service.getDomainInfoBulk(normalized, { insights });
             const results = infos.map(info => compact(info, false));
             return ok(results.map(summaryLine).join('\n'), { results });
         } catch (error) {
@@ -184,6 +204,7 @@ export function createMcpServer(service: DomainService = new DomainService(), op
             }
             const suffixes = [...new Set((tlds ?? DEFAULT_TLDS).map(tld => tld.trim().toLowerCase().replace(/^\./, '')))];
             const domains = normalizeDomainList(suffixes.map(tld => `${label}.${tld}`), MAX_TLDS);
+            limits?.lookups(domains.length);
             const infos = await service.getDomainInfoBulk(domains);
             const results = infos.map(info => ({
                 domain: info.domain,
@@ -212,6 +233,8 @@ export function createMcpServer(service: DomainService = new DomainService(), op
     }, async args => {
         try {
             const request = normalizeSuggestionRequest(args);
+            limits?.suggestion();
+            limits?.lookups(Math.min(request.count * request.tlds.length, MAX_SUGGESTION_LOOKUPS));
             const canSample = Boolean(server.server.getClientCapabilities()?.sampling);
             let result;
             if (canSample) {

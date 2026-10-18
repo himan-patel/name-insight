@@ -7,7 +7,7 @@ import * as config from '../../config/global.config';
 import { ExtractionType } from './extraction-type.enum';
 import { clientIp } from '../client-ip';
 import { HttpError } from '../http-error';
-import { FixedWindowBudget } from '../../utils/fixed-window-budget';
+import { BudgetExceededError, chargeLookupBudget, chargeSuggestionBudget } from '../budgets';
 import {
     createClaudeGenerator, DomainService, LookupOptions, MAX_SUGGESTION_LOOKUPS, normalizeDomain, normalizeDomainList,
     normalizeSuggestionRequest, suggestDomains, SuggestionsUnavailableError
@@ -42,16 +42,16 @@ function handleUpload(req: express.Request, res: express.Response, next: express
     });
 }
 
-/** Domains each client IP may look up per window; bulk requests cost one unit per domain. */
-const lookupBudget = new FixedWindowBudget(config.lookupBudgetMax, config.lookupBudgetWindowMs);
-
 /** Charges `count` lookups to the caller's budget, or rejects with 429 and Retry-After. */
 function chargeLookups(req: express.Request, res: express.Response, count: number) {
-    const decision = lookupBudget.consume(clientIp(req), count);
-    if (!decision.allowed) {
-        res.set('Retry-After', String(Math.ceil(decision.retryAfterMs / 1000)));
-        throw new HttpError(429, `Lookup budget exceeded: ${count} requested, ${decision.remaining} of ${config.lookupBudgetMax} ` +
-            `remaining in this ${config.lookupBudgetWindowMs / 1000}s window`);
+    try {
+        chargeLookupBudget(clientIp(req), count);
+    } catch (error) {
+        if (error instanceof BudgetExceededError) {
+            res.set('Retry-After', String(error.retryAfterSeconds));
+            throw new HttpError(429, error.message);
+        }
+        throw error;
     }
 }
 
@@ -132,6 +132,16 @@ export class DomainRoutes {
             const request = normalizeSuggestionRequest(req.body);
             if (!config.claudeApiConfigured) {
                 throw new SuggestionsUnavailableError();
+            }
+            // stricter per-IP limit for suggestions (each calls a paid model), shared with the hosted MCP endpoint
+            try {
+                chargeSuggestionBudget(clientIp(req));
+            } catch (error) {
+                if (error instanceof BudgetExceededError) {
+                    res.set('Retry-After', String(error.retryAfterSeconds));
+                    throw new HttpError(429, error.message);
+                }
+                throw error;
             }
             const maxLookups = Math.min(MAX_SUGGESTION_LOOKUPS, config.lookupBudgetMax);
             chargeLookups(req, res, Math.min(request.count * request.tlds.length, maxLookups));
