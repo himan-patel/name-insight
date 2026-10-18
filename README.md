@@ -111,8 +111,10 @@ With the server running, open:
 Swagger UI lists every endpoint, with sample request bodies, example responses and the response schemas.
 Use **Try it out** to send real requests to your local server.
 
-The spec is written by hand in `app/http/docs/openapi.ts`. When you add or change an endpoint in
-`app/http/routes/domain.api.ts`, update the spec to match.
+Request and response schemas are generated from the zod contract in `app/core/schemas.ts` (also the source of the
+TypeScript types and, later, the MCP tool inputs), so they can't drift from the code. Paths, descriptions and examples
+live in `app/http/docs/openapi.ts`; contract tests check real responses and the documented examples against the
+schemas.
 
 ## Endpoints
 
@@ -173,11 +175,12 @@ app/
 │   ├── validation.ts           # Domain name validation and public-IP checks
 │   ├── dns.ts                  # DNS resolver with timeout and optional DNS_SERVERS
 │   ├── whois.ts                # WHOIS client: referral checks, size cap, hard deadline
+│   ├── schemas.ts              # zod data contract: types, OpenAPI schemas, MCP inputs
 │   └── errors.ts               # ValidationError (mapped to 400 by the HTTP layer)
 ├── http/                       # REST API (Express)
 │   ├── app.ts                  # createApp(): middleware, Swagger mount, routes, error handling
 │   ├── http-error.ts           # Error type carrying an HTTP status
-│   ├── docs/openapi.ts         # OpenAPI spec served at /api-docs
+│   ├── docs/openapi.ts         # OpenAPI spec (generated from core schemas) served at /api-docs
 │   └── routes/                 # Route registration, domain endpoints, file uploads
 ├── types/                      # Type declarations for untyped packages
 └── utils/async.ts              # Timeout, concurrency, semaphore and error helpers
