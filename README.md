@@ -84,8 +84,11 @@ all; copy it to `.env` (gitignored) and run with `node --env-file=.env ./dist/ap
 | `SHUTDOWN_TIMEOUT_MS` | `10000` | On SIGTERM/SIGINT, how long in-flight requests may finish before connections are force-closed |
 | `CORS_ORIGINS` | _(empty)_ | Comma-separated origins allowed to call the API from a browser, e.g. `https://app.example.com`. Empty means no cross-origin access |
 | `TRUST_PROXY_HOPS` | `0` | Number of reverse proxies in front of the service. Set this behind a load balancer so rate limiting uses the real client IP |
-| `RATE_LIMIT_MAX` | `30` | Requests allowed per client IP per window on `/api/*` |
+| `API_KEYS_SHA256` | _(empty)_ | Comma-separated SHA-256 digests of valid API keys. When set, `/api/*` requires a key (see [Authentication](#authentication)) |
+| `RATE_LIMIT_MAX` | `30` | Requests allowed per client (API key, or IP) per window on `/api/*` |
 | `RATE_LIMIT_WINDOW_MS` | `60000` | Rate-limit window in milliseconds |
+| `LOOKUP_BUDGET_MAX` | `200` | Domains each client may look up per window (a bulk request costs one per domain) |
+| `LOOKUP_BUDGET_WINDOW_MS` | `60000` | Lookup-budget window in milliseconds |
 | `MAX_DOMAINS_PER_REQUEST` | `50` | Maximum domains in one bulk request |
 | `LOOKUP_CONCURRENCY` | `5` | Domains looked up at the same time within one request |
 | `MAX_CONCURRENT_LOOKUPS` | `20` | Domains looked up at the same time across all requests |
@@ -100,6 +103,28 @@ all; copy it to `.env` (gitignored) and run with `node --env-file=.env ./dist/ap
 Numeric values must be non-negative integers; the app refuses to start otherwise.
 
 For example: `API_PORT=3000 npm run start:tsnode`
+
+## Authentication
+
+API keys are optional for local use and **required for any public deployment**.
+
+```bash
+npm run generate-api-key
+```
+
+This prints a new random key (give it to the client; it is shown once) and its SHA-256 digest. Configure only the
+digest on the server, comma-separated for several keys:
+
+```bash
+API_KEYS_SHA256=<digest>[,<digest>...]
+```
+
+Clients send the key as `Authorization: Bearer <key>` or `X-API-Key: <key>`. The server stores and compares only
+digests (in constant time), never logs keys, and returns `401` for a missing or wrong key. `/healthz` and the docs stay
+open. Without `API_KEYS_SHA256` the API is open, and the server logs a warning at startup if it is reachable beyond
+localhost.
+
+> Keep keys in a secret or password manager. Never commit them or put them in issues or PRs.
 
 ## API documentation (Swagger)
 
@@ -145,7 +170,8 @@ On `SIGTERM`/`SIGINT` the server stops accepting connections, lets in-flight loo
 - WHOIS referrals (the registry pointing to the registrar's WHOIS server) are only followed to public addresses on
   port 43. If the registrar's server fails, the registry's response is returned.
 - A WHOIS failure doesn't fail the request: that domain gets `whois: null` and a `whoisError` message.
-- Errors are JSON: `{ "error": "message", "details": { ... } }`. Too many requests returns `429`.
+- Errors are JSON: `{ "error": "message", "details": { ... } }`. Too many requests, or more domains than the
+  client's lookup budget allows, returns `429` (the budget response includes `Retry-After`).
 
 ### Quick test with curl
 
@@ -202,10 +228,9 @@ deterministic. HTTP behavior is tested with [supertest](https://github.com/ladjs
 
 ## Known limitations
 
-- **No authentication.** Anyone who can reach the service can use it, up to the rate limit. Put it behind
-  authentication (or a private network) before exposing it publicly.
+- **Authentication is opt-in.** Set `API_KEYS_SHA256` before exposing the service publicly.
 - **The rate limit is per process and in memory.** It resets on restart and isn't shared between instances.
-  It counts requests, not domains, so one client can trigger up to 50 lookups per request.
+  The lookup budget (`LOOKUP_BUDGET_MAX`) additionally caps domains per client per window.
 - **WHOIS servers rate-limit heavy use.** Large or frequent bulk requests may start getting `whoisError` results.
 - **`available` is an estimate** (see the note at the top).
 

@@ -5,7 +5,9 @@ import multer from 'multer';
 // Internal
 import * as config from '../../config/global.config';
 import { ExtractionType } from './extraction-type.enum';
+import { clientKey } from '../auth';
 import { HttpError } from '../http-error';
+import { FixedWindowBudget } from '../../utils/fixed-window-budget';
 import { DomainService, normalizeDomain, normalizeDomainList } from '../../core';
 
 // Files are kept in memory (never written to disk) and capped in size
@@ -37,6 +39,19 @@ function handleUpload(req: express.Request, res: express.Response, next: express
     });
 }
 
+/** Domains each client may look up per window; bulk requests cost one unit per domain. */
+const lookupBudget = new FixedWindowBudget(config.lookupBudgetMax, config.lookupBudgetWindowMs);
+
+/** Charges `count` lookups to the caller's budget, or rejects with 429 and Retry-After. */
+function chargeLookups(req: express.Request, res: express.Response, count: number) {
+    const decision = lookupBudget.consume(clientKey(req, res), count);
+    if (!decision.allowed) {
+        res.set('Retry-After', String(Math.ceil(decision.retryAfterMs / 1000)));
+        throw new HttpError(429, `Lookup budget exceeded: ${count} requested, ${decision.remaining} of ${config.lookupBudgetMax} ` +
+            `remaining in this ${config.lookupBudgetWindowMs / 1000}s window`);
+    }
+}
+
 export class DomainRoutes {
     private _domainService: DomainService;
 
@@ -55,6 +70,7 @@ export class DomainRoutes {
     async getInfoSingle(req: express.Request, res: express.Response, next: express.NextFunction) {
         try {
             const domain = normalizeDomain(req.params.domain);
+            chargeLookups(req, res, 1);
             res.status(200).json(await this._domainService.getDomainInfo(domain));
         } catch (error) {
             next(error);
@@ -82,6 +98,7 @@ export class DomainRoutes {
             }
 
             const domains = normalizeDomainList(rawDomains, config.maxDomainsPerRequest);
+            chargeLookups(req, res, domains.length);
             res.status(200).json(await this._domainService.getDomainInfoBulk(domains));
         } catch (error) {
             next(error);
