@@ -1,4 +1,4 @@
-import { mapWithConcurrency, Semaphore, withTimeout } from '../app/utils/async';
+import { errorMessage, mapWithConcurrency, Semaphore, withTimeout } from '../app/utils/async';
 
 const delay = <T>(ms: number, value?: T) => new Promise<T>(resolve => setTimeout(() => resolve(value as T), ms));
 
@@ -76,5 +76,16 @@ describe('Semaphore', () => {
             await delay(1);
         })));
         expect(order).toEqual([1, 2, 3, 4]);
+    });
+});
+
+describe('errorMessage', () => {
+    it.each([
+        [new Error('boom'), 'boom'],
+        ['plain string', 'plain string'],
+        [42, '42'],
+        [undefined, 'undefined']
+    ])('returns a message for %p', (value, expected) => {
+        expect(errorMessage(value)).toBe(expected);
     });
 });

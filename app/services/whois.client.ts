@@ -7,6 +7,7 @@ import whoisServers from 'whois/servers.json';
 import * as config from '../config/global.config';
 import { createResolver } from './dns-resolver';
 import { isPublicAddress } from './domain-validation';
+import { errorMessage } from '../utils/async';
 
 interface WhoisServer {
     host: string;
@@ -127,7 +128,7 @@ export async function whoisLookup(domain: string): Promise<string> {
             if (!answers.length) {
                 throw error;
             }
-            console.warn(`WhoisClient.whoisLookup :: Referral to [${host}] failed for [${domain}], using previous response: ${error.message}`);
+            console.warn(`WhoisClient.whoisLookup :: Referral to [${host}] failed for [${domain}], using previous response: ${errorMessage(error)}`);
             break;
         }
     }

@@ -36,7 +36,7 @@ function routeConnections(routes: { [ip: string]: number }) {
     jest.spyOn(nodeNet, 'connect').mockImplementation(((options: net.NetConnectOpts) => {
         const { host, port } = options as net.TcpNetConnectOpts;
         connected.push(`${host}:${port}`);
-        return realConnect({ host: '127.0.0.1', port: routes[host] ?? 1 });
+        return realConnect({ host: '127.0.0.1', port: (host && routes[host]) || 1 });
     }) as typeof net.connect);
     return connected;
 }

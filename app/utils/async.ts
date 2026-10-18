@@ -56,3 +56,8 @@ export async function mapWithConcurrency<T, R>(items: T[], concurrency: number, 
     await Promise.all(workers);
     return results;
 }
+
+/** Message of a caught value, which may not be an Error under `strict` (`catch` gives `unknown`). */
+export function errorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+}
