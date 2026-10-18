@@ -7,6 +7,7 @@ import whoisServers from 'whois/servers.json';
 import * as config from '../config/global.config';
 import { createResolver } from './dns';
 import { isPublicAddress } from './validation';
+import { parseWhois } from './whois-parse';
 import { errorMessage } from '../utils/async';
 
 interface WhoisServer {
@@ -136,5 +137,21 @@ export async function whoisLookup(domain: string): Promise<string> {
     if (!answers.length) {
         throw new Error('empty WHOIS response');
     }
-    return answers[answers.length - 1];
+    return chooseAnswer(answers, domain);
+}
+
+/**
+ * Picks the response to report: normally the last (most detailed, the registrar's). But a referral hop must never
+ * downgrade an earlier "registered" answer to "not found" (stale referral, rate-limit page, registrar outage), so in
+ * that case the last answer that doesn't say "not found" wins.
+ */
+export function chooseAnswer(answers: string[], domain = ''): string {
+    const last = answers[answers.length - 1];
+    if (answers.length > 1 && parseWhois(last).registered === false
+        && answers.slice(0, -1).some(answer => parseWhois(answer).registered === true)) {
+        console.warn(`WhoisClient.whoisLookup :: Referral said "not found" for [${domain}] but the registry has it; keeping the registry answer`);
+        const trusted = [...answers].reverse().find(answer => parseWhois(answer).registered !== false);
+        return trusted ?? answers[0];
+    }
+    return last;
 }
