@@ -21,7 +21,8 @@ const service = new DomainService();
 
 beforeEach(() => {
     records = {};
-    whois.mockResolvedValue('Domain Name: EXAMPLE.COM');
+    // non-committal WHOIS text by default, so tests exercise the DNS/ping signals
+    whois.mockResolvedValue('% test WHOIS server');
     probe.mockImplementation(async (host: string) => ({ host, alive: true, time: 12.3, output: 'PING ok' }));
 });
 
@@ -34,7 +35,7 @@ describe('DomainService.getDomainInfo', () => {
         expect(info).toMatchObject({
             domain: 'example.com',
             available: false,
-            whois: 'Domain Name: EXAMPLE.COM',
+            whois: '% test WHOIS server',
             dns: { addresses: ['93.184.216.34', '93.184.216.35', '2606:2800:220:1::1'] },
             probe: { host: 'example.com', alive: true, numeric_host: '93.184.216.34' }
         });

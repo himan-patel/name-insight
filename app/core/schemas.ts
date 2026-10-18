@@ -63,6 +63,30 @@ export const RdapResultSchema = z.object({
     error: z.enum(RDAP_ERRORS).optional()
 }).describe('Registration data from the registry over RDAP (the structured successor to WHOIS)');
 
+export const DOMAIN_STATUSES = ['available', 'registered', 'parked', 'expiring', 'unknown'] as const;
+export const CONFIDENCE_LEVELS = ['high', 'medium', 'low'] as const;
+
+export const RegistrationSchema = z.object({
+    source: z.enum(['rdap', 'whois', 'none']).describe('Where the registration facts came from'),
+    registered: z.boolean().nullable(),
+    created: z.string().optional().describe('Registration date (ISO 8601)'),
+    expires: z.string().optional().describe('Expiration date (ISO 8601)'),
+    registrar: z.string().optional(),
+    status: z.array(z.string()).optional().describe('EPP status values'),
+    nameservers: z.array(z.string()).optional(),
+    ageDays: z.number().int().optional().describe('Days since registration'),
+    daysUntilExpiry: z.number().int().optional().describe('Days until expiration (negative if past)')
+}).describe('Consolidated registration facts: RDAP when available, otherwise parsed WHOIS');
+
+export const AssessmentSchema = z.object({
+    status: z.enum(DOMAIN_STATUSES).describe('available | registered | parked (nameservers at a parking/for-sale service) | ' +
+        `expiring (expires within 30 days or is being deleted) | unknown`),
+    confidence: z.enum(CONFIDENCE_LEVELS).describe('high: registry answer. medium: DNS records without registry data. ' +
+        'low: estimate from the absence of DNS records and ping replies.'),
+    registration: RegistrationSchema,
+    reasons: z.array(z.string()).describe('Human-readable explanation of the status')
+});
+
 export const DomainInfoSchema = z.object({
     probe: PingProbeSchema,
     dns: DnsResultSchema,
@@ -71,10 +95,9 @@ export const DomainInfoSchema = z.object({
         .describe("Raw WHOIS text: the registrar's response, or the registry's if the registrar lookup failed. Truncated at " +
             `${config.maxWhoisResponseBytes / 1024} KB. null if WHOIS failed.`),
     whoisError: z.enum(WHOIS_ERRORS).optional().describe('Present only when `whois` is null'),
-    available: z.boolean()
-        .describe('Authoritative from RDAP when the registry answers (`rdap.registered`); otherwise an estimate: true when DNS has ' +
-            'no A/AAAA records and nothing answers the ping.'),
-    domain: z.string().describe('Normalized domain (lowercase, punycode)')
+    available: z.boolean().describe('Shorthand for status === "available" (see `confidence` for how sure it is)'),
+    domain: z.string().describe('Normalized domain (lowercase, punycode)'),
+    ...AssessmentSchema.shape
 });
 
 export const ErrorResponseSchema = z.object({
@@ -87,4 +110,6 @@ export type DnsResult = z.infer<typeof DnsResultSchema>;
 export type PingProbe = z.infer<typeof PingProbeSchema>;
 export type ProbeSkipReason = typeof PROBE_SKIP_REASONS[number];
 export type RdapResult = z.infer<typeof RdapResultSchema>;
+export type Registration = z.infer<typeof RegistrationSchema>;
+export type Assessment = z.infer<typeof AssessmentSchema>;
 export type DomainInfo = z.infer<typeof DomainInfoSchema>;

@@ -17,18 +17,30 @@ Each result looks like this:
 
 ```json
 {
+  "domain": "example.com",
+  "status": "registered",
+  "confidence": "high",
+  "registration": { "source": "rdap", "registered": true, "created": "1995-08-14T04:00:00Z", "expires": "2027-08-13T04:00:00Z", "ageDays": 11387, "daysUntilExpiry": 299, "registrar": "…" },
+  "reasons": ["Registry (RDAP) reports the domain is registered (registrar: …)"],
+  "available": false,
   "probe": { "host": "example.com", "alive": true, "time": 38.9, "numeric_host": "104.20.23.154", "...": "..." },
   "dns": { "addresses": ["104.20.23.154", "2606:4700:10::6814:179a"] },
   "rdap": { "registered": true, "registrar": "…", "created": "1995-08-14T04:00:00Z", "expires": "2027-08-13T04:00:00Z", "…": "…" },
   "whois": "Domain Name: EXAMPLE.COM\n...",
-  "available": false,
-  "domain": "example.com"
+  "…": "…"
 }
 ```
 
-> **Note:** when the registry answers over RDAP, `available` is authoritative (`rdap.registered`). For TLDs without
-> RDAP it is an estimate: `true` only when DNS has no address records **and** the ping gets no reply; check the
-> `whois` text to confirm (e.g. `No match for domain ...`).
+**`status`** is one of `available`, `registered`, `parked` (nameservers at a parking or for-sale marketplace),
+`expiring` (expires within 30 days, or the registry is deleting it) or `unknown`. **`confidence`** says how sure it is:
+
+| Confidence | Meaning |
+|---|---|
+| `high` | The registry answered: RDAP, or WHOIS text that clearly says registered / not registered |
+| `medium` | No registry data, but the domain has DNS records (so it is registered) |
+| `low` | No registry data and no DNS records or ping replies: an estimate |
+
+`reasons` explains the decision in plain English, and `available` is shorthand for `status === "available"`.
 
 ## Prerequisites
 
@@ -186,6 +198,8 @@ app/
 │   ├── dns.ts                  # DNS resolver with timeout and optional DNS_SERVERS
 │   ├── whois.ts                # WHOIS client: referral checks, size cap, hard deadline
 │   ├── rdap.ts                 # RDAP client with cached IANA bootstrap
+│   ├── whois-parse.ts          # Registration facts from raw WHOIS text
+│   ├── availability.ts         # status / confidence / reasons from all signals
 │   ├── http-client.ts          # HTTPS JSON client: public-address pinning, size cap, deadline
 │   ├── schemas.ts              # zod data contract: types, OpenAPI schemas, MCP inputs
 │   └── errors.ts               # ValidationError (mapped to 400 by the HTTP layer)

@@ -19,6 +19,11 @@ const ErrorResponse = ErrorResponseSchema.meta({ id: 'Error' });
 const DomainsPayload = DomainsPayloadSchema.meta({ id: 'DomainsPayload' });
 
 const availableExample = {
+    domain: 'zzqx-unregistered-test-98123.com',
+    status: 'available',
+    confidence: 'high',
+    registration: { source: 'rdap', registered: false },
+    reasons: ['Registry (RDAP) reports the domain is not registered'],
     probe: {
         host: 'zzqx-unregistered-test-98123.com',
         alive: false,
@@ -35,11 +40,25 @@ const availableExample = {
     dns: { addresses: [] },
     rdap: { registered: false, server: 'rdap.verisign.com' },
     whois: 'No match for domain "ZZQX-UNREGISTERED-TEST-98123.COM".\r\n>>> Last update of whois database: 2026-10-17T18:51:41Z <<<\r\n...',
-    available: true,
-    domain: 'zzqx-unregistered-test-98123.com'
+    available: true
 };
 
 const takenExample = {
+    domain: 'example.com',
+    status: 'registered',
+    confidence: 'high',
+    registration: {
+        source: 'rdap',
+        registered: true,
+        created: '1995-08-14T04:00:00Z',
+        expires: '2027-08-13T04:00:00Z',
+        registrar: 'RESERVED-Internet Assigned Numbers Authority',
+        status: ['client delete prohibited', 'client transfer prohibited', 'client update prohibited'],
+        nameservers: ['elliott.ns.cloudflare.com', 'hera.ns.cloudflare.com'],
+        ageDays: 11387,
+        daysUntilExpiry: 299
+    },
+    reasons: ['Registry (RDAP) reports the domain is registered (registrar: RESERVED-Internet Assigned Numbers Authority)'],
     probe: {
         host: 'example.com',
         alive: true,
@@ -68,8 +87,7 @@ const takenExample = {
         dnssec: true
     },
     whois: 'Domain Name: EXAMPLE.COM\r\nRegistry Domain ID: 2336799_DOMAIN_COM-VRSN\r\n...',
-    available: false,
-    domain: 'example.com'
+    available: false
 };
 
 /** The examples are checked against the schemas in the test suite. */

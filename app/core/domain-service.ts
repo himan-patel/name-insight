@@ -6,7 +6,9 @@ import * as ping from 'ping';
 import * as config from '../config/global.config';
 import { createResolver } from './dns';
 import { isPublicAddress } from './validation';
+import { assessAvailability } from './availability';
 import { rdapClient, RdapClient } from './rdap';
+import { parseWhois } from './whois-parse';
 import { whoisLookup } from './whois';
 import type { DnsResult, DomainInfo, PingProbe, ProbeSkipReason } from './schemas';
 import { errorMessage, mapWithConcurrency, Semaphore, withTimeout } from '../utils/async';
@@ -44,16 +46,16 @@ export class DomainService {
         dnsResult.error = resolved.error;
       }
 
+      const assessment = assessAvailability({ rdap, whois: parseWhois(whoisResult.whois), dns: dnsResult, probe });
+
       return {
+        domain,
+        ...assessment,
+        available: assessment.status === 'available',
         probe,
         dns: dnsResult,
         rdap,
-        ...whoisResult,
-        // The registry's RDAP answer is authoritative; otherwise estimate from DNS records and ping
-        available: rdap.registered !== null
-          ? !rdap.registered
-          : !resolved.error && resolved.addresses.length === 0 && !probe.alive,
-        domain
+        ...whoisResult
       };
     });
   }

@@ -7,7 +7,8 @@ jest.mock('../app/core/dns', () => ({
     createResolver: () => fakeResolver(records)
 }));
 jest.mock('../app/core/whois', () => ({
-    whoisLookup: jest.fn(async (domain: string) => `Domain Name: ${domain.toUpperCase()}`)
+    whoisLookup: jest.fn(async (domain: string) =>
+        domain.startsWith('free') ? `No match for domain "${domain.toUpperCase()}".` : `Domain Name: ${domain.toUpperCase()}`)
 }));
 jest.mock('ping', () => ({
     promise: { probe: jest.fn(async (host: string) => ({ host, alive: true, time: 10 })) }

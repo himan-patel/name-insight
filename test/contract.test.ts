@@ -19,7 +19,7 @@ const whois = whoisLookup as jest.Mock;
 
 beforeEach(() => {
     records = {};
-    whois.mockResolvedValue('Domain Name: EXAMPLE.COM');
+    whois.mockResolvedValue('% test WHOIS server');
     probe.mockImplementation(async (host: string) => ({
         inputHost: host, host, numeric_host: host, alive: true, output: 'PING', time: 9.5, times: [9.5],
         min: '9.5', max: '9.5', avg: '9.5', stddev: '0.000', packetLoss: '0.000'
@@ -82,6 +82,6 @@ describe('generated OpenAPI spec', () => {
 
     it('marks every DomainInfo field the API always returns as required', () => {
         const info = openApiSpec.components?.schemas?.DomainInfo as { required: string[] };
-        expect(info.required.sort()).toEqual(['available', 'dns', 'domain', 'probe', 'rdap', 'whois']);
+        expect(info.required.sort()).toEqual(['available', 'confidence', 'dns', 'domain', 'probe', 'rdap', 'reasons', 'registration', 'status', 'whois']);
     });
 });
