@@ -8,7 +8,7 @@ jest.mock('../app/core/dns', () => ({
     createResolver: () => fakeResolver(records)
 }));
 
-import { extractReferral, queryServer, resolvePublicHost, whoisLookup } from '../app/core/whois';
+import { chooseAnswer, extractReferral, queryServer, resolvePublicHost, whoisLookup } from '../app/core/whois';
 
 // Settings come from test/setup-env.ts: WHOIS_TIMEOUT_MS=500, MAX_WHOIS_RESPONSE_BYTES=2048
 
@@ -218,5 +218,31 @@ describe('whoisLookup', () => {
 
     it('rejects when no WHOIS server is known for the TLD', async () => {
         await expect(whoisLookup('example.zzzzunknown')).rejects.toThrow('no WHOIS server is known');
+    });
+});
+
+describe('referral precedence', () => {
+    const registry = 'Domain Name: EXAMPLE.COM\r\n   Registrar WHOIS Server: whois.registrar.example\r\n';
+    const registrarNotFound = 'No match for domain "EXAMPLE.COM".\r\n';
+    const registrarDetail = 'Domain Name: example.com\r\nRegistrar: Example Registrar\r\n';
+
+    it('prefers the registrar answer normally', () => {
+        expect(chooseAnswer([registry, registrarDetail])).toBe(registrarDetail);
+    });
+
+    it('never lets a referral hop downgrade "registered" to "not found"', () => {
+        expect(chooseAnswer([registry, registrarNotFound])).toBe(registry);
+    });
+
+    it('keeps a registry "not found" (single hop)', () => {
+        expect(chooseAnswer([registrarNotFound])).toBe(registrarNotFound);
+    });
+
+    it('applies end to end through whoisLookup', async () => {
+        records = { 'whois.verisign-grs.com': { a: ['93.184.216.34'] }, 'whois.registrar.example': { a: ['151.101.1.1'] } };
+        const registryServer = await fakeWhoisServer(socket => socket.end(registry));
+        const registrarServer = await fakeWhoisServer(socket => socket.end(registrarNotFound));
+        routeConnections({ '93.184.216.34': registryServer, '151.101.1.1': registrarServer });
+        await expect(whoisLookup('example.com')).resolves.toBe(registry);
     });
 });
