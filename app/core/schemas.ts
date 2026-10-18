@@ -63,6 +63,32 @@ export const RdapResultSchema = z.object({
     error: z.enum(RDAP_ERRORS).optional()
 }).describe('Registration data from the registry over RDAP (the structured successor to WHOIS)');
 
+export const WebCheckSchema = z.object({
+    reachable: z.boolean().describe('Whether https://<domain>/ answered'),
+    status: z.number().int().optional().describe('HTTP status of a HEAD request'),
+    redirect: z.string().optional().describe('Redirect target (Location header), not followed'),
+    tls: z.object({
+        valid: z.boolean().describe('Certificate chain and hostname are valid'),
+        error: z.string().optional().describe('Why the certificate is invalid, e.g. CERT_HAS_EXPIRED'),
+        issuer: z.string().optional(),
+        validTo: z.string().optional(),
+        daysRemaining: z.number().int().optional()
+    }).optional(),
+    error: z.enum(['timed out', 'connection failed', 'not a public address', 'no public address']).optional()
+});
+
+export const InsightsSchema = z.object({
+    nameservers: z.array(z.string()).optional().describe('NS records from DNS'),
+    email: z.object({
+        mx: z.array(z.string()).describe('Mail servers, by priority'),
+        acceptsMail: z.boolean().describe('Has mail servers (false when there are none or a null MX says it accepts no mail)'),
+        spf: z.boolean().describe('An SPF (v=spf1) TXT record exists'),
+        dmarc: z.boolean().describe('A DMARC record exists at _dmarc.<domain>'),
+        dmarcPolicy: z.enum(['none', 'quarantine', 'reject']).optional()
+    }),
+    web: WebCheckSchema
+}).describe('Optional extra signals (request with insights=true)');
+
 export const DOMAIN_STATUSES = ['available', 'registered', 'parked', 'expiring', 'unknown'] as const;
 export const CONFIDENCE_LEVELS = ['high', 'medium', 'low'] as const;
 
@@ -97,6 +123,7 @@ export const DomainInfoSchema = z.object({
     whoisError: z.enum(WHOIS_ERRORS).optional().describe('Present only when `whois` is null'),
     available: z.boolean().describe('Shorthand for status === "available" (see `confidence` for how sure it is)'),
     domain: z.string().describe('Normalized domain (lowercase, punycode)'),
+    insights: InsightsSchema.optional(),
     ...AssessmentSchema.shape
 });
 
@@ -110,6 +137,8 @@ export type DnsResult = z.infer<typeof DnsResultSchema>;
 export type PingProbe = z.infer<typeof PingProbeSchema>;
 export type ProbeSkipReason = typeof PROBE_SKIP_REASONS[number];
 export type RdapResult = z.infer<typeof RdapResultSchema>;
+export type WebCheck = z.infer<typeof WebCheckSchema>;
+export type Insights = z.infer<typeof InsightsSchema>;
 export type Registration = z.infer<typeof RegistrationSchema>;
 export type Assessment = z.infer<typeof AssessmentSchema>;
 export type DomainInfo = z.infer<typeof DomainInfoSchema>;

@@ -115,6 +115,7 @@ all; copy it to `.env` (gitignored) and run with `node --env-file=.env ./dist/ap
 | `MAX_WHOIS_RESPONSE_BYTES` | `131072` | WHOIS responses longer than this are truncated |
 | `RDAP_TIMEOUT_MS` | `5000` | Hard deadline per RDAP request |
 | `MAX_RDAP_RESPONSE_BYTES` | `262144` | Larger RDAP responses are discarded |
+| `WEB_CHECK_TIMEOUT_MS` | `5000` | Hard deadline for the `insights` HTTPS check |
 
 Numeric values must be non-negative integers; the app refuses to start otherwise.
 
@@ -146,6 +147,10 @@ schemas.
 
 The bulk endpoints return an array with one result per unique domain, in input order.
 
+Add **`?insights=true`** to any lookup endpoint for extra signals (slower): DNS nameservers, email setup (MX,
+whether it accepts mail, SPF, DMARC policy) and an HTTPS check of `https://<domain>/` (status, redirect target, TLS
+certificate validity, issuer and days remaining). Nameservers found this way also feed parking detection.
+
 On `SIGTERM`/`SIGINT` the server stops accepting connections, lets in-flight lookups finish (up to
 `SHUTDOWN_TIMEOUT_MS`), then exits. A second signal exits immediately.
 
@@ -165,6 +170,8 @@ On `SIGTERM`/`SIGINT` the server stops accepting connections, lets in-flight loo
   port 43. If the registrar's server fails, the registry's response is returned.
 - RDAP requests use HTTPS only (certificates validated), connect only to public IPv4 addresses, never follow
   redirects or links, and are size- and time-limited.
+- The `insights` website check connects only to public IPv4 addresses, sends a `HEAD` request (headers only), never
+  follows redirects, and accepts invalid certificates only so it can report them (nothing sensitive is sent).
 - A WHOIS failure doesn't fail the request: that domain gets `whois: null` and a `whoisError` message.
 - Errors are JSON: `{ "error": "message", "details": { ... } }`. Too many requests, or more domains than the
   client's lookup budget allows, returns `429` (the budget response includes `Retry-After`).
@@ -200,6 +207,7 @@ app/
 │   ├── rdap.ts                 # RDAP client with cached IANA bootstrap
 │   ├── whois-parse.ts          # Registration facts from raw WHOIS text
 │   ├── availability.ts         # status / confidence / reasons from all signals
+│   ├── insights.ts             # optional NS, MX/SPF/DMARC and HTTPS/TLS checks
 │   ├── http-client.ts          # HTTPS JSON client: public-address pinning, size cap, deadline
 │   ├── schemas.ts              # zod data contract: types, OpenAPI schemas, MCP inputs
 │   └── errors.ts               # ValidationError (mapped to 400 by the HTTP layer)

@@ -8,7 +8,7 @@ import { ExtractionType } from './extraction-type.enum';
 import { clientIp } from '../client-ip';
 import { HttpError } from '../http-error';
 import { FixedWindowBudget } from '../../utils/fixed-window-budget';
-import { DomainService, normalizeDomain, normalizeDomainList } from '../../core';
+import { DomainService, LookupOptions, normalizeDomain, normalizeDomainList } from '../../core';
 
 // Files are kept in memory (never written to disk) and capped in size
 const upload = multer({
@@ -52,6 +52,21 @@ function chargeLookups(req: express.Request, res: express.Response, count: numbe
     }
 }
 
+/** Parses the optional `insights` query flag (true/false/1/0). */
+function lookupOptions(req: express.Request): LookupOptions {
+    const value = req.query.insights;
+    if (value === undefined) {
+        return {};
+    }
+    if (value === 'true' || value === '1') {
+        return { insights: true };
+    }
+    if (value === 'false' || value === '0') {
+        return { insights: false };
+    }
+    throw new HttpError(400, 'Invalid insights parameter: use true or false');
+}
+
 export class DomainRoutes {
     private _domainService: DomainService;
 
@@ -70,8 +85,9 @@ export class DomainRoutes {
     async getInfoSingle(req: express.Request, res: express.Response, next: express.NextFunction) {
         try {
             const domain = normalizeDomain(req.params.domain);
+            const options = lookupOptions(req);
             chargeLookups(req, res, 1);
-            res.status(200).json(await this._domainService.getDomainInfo(domain));
+            res.status(200).json(await this._domainService.getDomainInfo(domain, options));
         } catch (error) {
             next(error);
         }
@@ -98,8 +114,9 @@ export class DomainRoutes {
             }
 
             const domains = normalizeDomainList(rawDomains, config.maxDomainsPerRequest);
+            const options = lookupOptions(req);
             chargeLookups(req, res, domains.length);
-            res.status(200).json(await this._domainService.getDomainInfoBulk(domains));
+            res.status(200).json(await this._domainService.getDomainInfoBulk(domains, options));
         } catch (error) {
             next(error);
         }

@@ -77,4 +77,5 @@ export const pingTimeoutSeconds = Math.max(1, intFromEnv('PING_TIMEOUT_SECONDS',
 export const whoisTimeoutMs = intFromEnv('WHOIS_TIMEOUT_MS', 10_000);
 export const maxWhoisResponseBytes = Math.max(1, intFromEnv('MAX_WHOIS_RESPONSE_BYTES', 128 * 1024));
 export const rdapTimeoutMs = intFromEnv('RDAP_TIMEOUT_MS', 5_000);
+export const webCheckTimeoutMs = intFromEnv('WEB_CHECK_TIMEOUT_MS', 5_000, 1);
 export const maxRdapResponseBytes = Math.max(1, intFromEnv('MAX_RDAP_RESPONSE_BYTES', 256 * 1024));
