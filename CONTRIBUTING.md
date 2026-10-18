@@ -51,7 +51,8 @@ gitleaks.
   argument without strict validation.
 - **Don't probe private networks.** Any new outbound request must go through the existing public-address
   checks (see `app/core/validation.ts`).
-- Keep the OpenAPI spec and README in sync with behavior changes.
+- Change request/response shapes in `app/core/schemas.ts` (the OpenAPI spec is generated from it), and keep
+  the README in sync with behavior changes.
 
 ## Reporting security issues
 
