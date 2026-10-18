@@ -4,11 +4,20 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # Only propose releases that have been public for at least two weeks (supply-chain safety)
+    cooldown:
+      default-days: 14
     open-pull-requests-limit: 5
     groups:
       dev-dependencies:
         dependency-type: development
+    ignore:
+      # Major upgrades are done deliberately in their own PRs, with testing
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 14
