@@ -3,7 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
 import helmet from 'helmet';
-import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import rateLimit from 'express-rate-limit';
 import * as swaggerUi from 'swagger-ui-express';
 
 // Private
@@ -13,7 +13,6 @@ import * as config from '../config/global.config';
 import { Routes } from './routes/index';
 import { openApiSpec } from './docs/openapi';
 import { ValidationError } from '../core';
-import { apiKeyAuth, clientKey } from './auth';
 import { HttpError } from './http-error';
 import { lifecycle } from './lifecycle';
 
@@ -42,8 +41,6 @@ export function createApp(): express.Application {
         app.use(morgan((tokens, req, res) => {
             return [
                 req.hostname,
-                // non-secret client id (API key digest prefix) for auditing; never the key itself
-                (res as express.Response).locals?.clientKey ?? '-',
                 tokens.method(req, res),
                 tokens.url(req, res),
                 tokens.status(req, res),
@@ -73,24 +70,12 @@ export function createApp(): express.Application {
     app.get('/api-docs.json', (req, res) => res.json(openApiSpec));
     app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(openApiSpec, { customSiteTitle: `${config.appName} API docs` }));
 
-    // API key authentication (enabled when API_KEYS_SHA256 is set), then a per-client request limit
-    // (each request triggers outbound DNS, ping and WHOIS). Clients are API keys, or IPs when unauthenticated.
-    // a loose per-IP limit runs first so requests with missing or wrong keys can't flood or guess unlimited
-    app.use('/api/', rateLimit({
-        windowMs: config.rateLimitWindowMs,
-        limit: config.rateLimitMax * 10,
-        standardHeaders: false,
-        legacyHeaders: false,
-        keyGenerator: req => `ip:${ipKeyGenerator(req.ip ?? 'unknown')}`,
-        message: { error: 'Too many requests, please try again later.' }
-    }));
-    app.use('/api/', apiKeyAuth(config.apiKeyHashes));
+    // per-IP request limit on the public API (each request triggers outbound DNS, RDAP, WHOIS and ping)
     app.use('/api/', rateLimit({
         windowMs: config.rateLimitWindowMs,
         limit: config.rateLimitMax,
         standardHeaders: 'draft-8',
         legacyHeaders: false,
-        keyGenerator: clientKey,
         message: { error: 'Too many requests, please try again later.' }
     }));
 

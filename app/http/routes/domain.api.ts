@@ -5,7 +5,7 @@ import multer from 'multer';
 // Internal
 import * as config from '../../config/global.config';
 import { ExtractionType } from './extraction-type.enum';
-import { clientKey } from '../auth';
+import { clientIp } from '../client-ip';
 import { HttpError } from '../http-error';
 import { FixedWindowBudget } from '../../utils/fixed-window-budget';
 import { DomainService, normalizeDomain, normalizeDomainList } from '../../core';
@@ -39,12 +39,12 @@ function handleUpload(req: express.Request, res: express.Response, next: express
     });
 }
 
-/** Domains each client may look up per window; bulk requests cost one unit per domain. */
+/** Domains each client IP may look up per window; bulk requests cost one unit per domain. */
 const lookupBudget = new FixedWindowBudget(config.lookupBudgetMax, config.lookupBudgetWindowMs);
 
 /** Charges `count` lookups to the caller's budget, or rejects with 429 and Retry-After. */
 function chargeLookups(req: express.Request, res: express.Response, count: number) {
-    const decision = lookupBudget.consume(clientKey(req, res), count);
+    const decision = lookupBudget.consume(clientIp(req), count);
     if (!decision.allowed) {
         res.set('Retry-After', String(Math.ceil(decision.retryAfterMs / 1000)));
         throw new HttpError(429, `Lookup budget exceeded: ${count} requested, ${decision.remaining} of ${config.lookupBudgetMax} ` +

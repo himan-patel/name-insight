@@ -75,22 +75,6 @@ const takenExample = {
 /** The examples are checked against the schemas in the test suite. */
 export const examples = { availableExample, takenExample };
 
-/** Security requirements and 401 docs apply only when API keys are configured (API_KEYS_SHA256). */
-const authEnabled = config.apiKeyHashes.length > 0;
-registry.registerComponent('securitySchemes', 'bearerAuth', {
-    type: 'http',
-    scheme: 'bearer',
-    description: 'API key sent as `Authorization: Bearer <key>` (generate with `npm run generate-api-key`)'
-});
-registry.registerComponent('securitySchemes', 'apiKeyHeader', {
-    type: 'apiKey',
-    in: 'header',
-    name: 'X-API-Key',
-    description: 'API key sent in the X-API-Key header'
-});
-const security: Record<string, string[]>[] = [{ bearerAuth: [] }, { apiKeyHeader: [] }];
-const secured = authEnabled ? { security } : {};
-
 const errorResponse = (description: string, example: object): ResponseConfig => ({
     description,
     content: { 'application/json': { schema: ErrorResponse, example } }
@@ -102,14 +86,12 @@ const serverError = errorResponse(
 );
 
 const rateLimited = errorResponse(
-    `Too many requests (${config.rateLimitMax} per ${config.rateLimitWindowMs / 1000}s per client; see the \`RateLimit\` ` +
+    `Too many requests (${config.rateLimitMax} per ${config.rateLimitWindowMs / 1000}s per client IP; see the \`RateLimit\` ` +
     `headers), or lookup budget exceeded (${config.lookupBudgetMax} domains per ${config.lookupBudgetWindowMs / 1000}s per ` +
-    'client; see `Retry-After`). Clients are identified by API key, or by IP when unauthenticated.',
+    'client IP; see `Retry-After`).',
     { error: 'Too many requests, please try again later.' }
 );
 
-const unauthorized = errorResponse('Missing or invalid API key', { error: 'Missing or invalid API key' });
-const authResponses: Record<string, ResponseConfig> = authEnabled ? { 401: unauthorized } : {};
 
 const bulkInvalid = errorResponse('The list is empty, too long, or contains invalid domains. Nothing is looked up.', {
     error: 'One or more domains are invalid',
@@ -147,7 +129,6 @@ registry.registerPath({
     tags: ['Domains'],
     summary: 'Look up a single domain',
     operationId: 'getDomainInfo',
-    ...secured,
     request: { params: z.object({ domain: DomainNameSchema.meta({ example: 'example.com' }) }) },
     responses: {
         200: {
@@ -166,7 +147,6 @@ registry.registerPath({
             error: 'IP addresses are not accepted; provide a domain name',
             details: { domain: '10.0.0.1' }
         }),
-        ...authResponses,
         429: rateLimited,
         500: serverError
     }
@@ -178,7 +158,6 @@ registry.registerPath({
     tags: ['Domains'],
     summary: 'Look up multiple domains from a JSON body',
     operationId: 'getDomainInfoBulkPayload',
-    ...secured,
     request: {
         body: {
             required: true,
@@ -195,7 +174,6 @@ registry.registerPath({
         200: bulkSuccess,
         400: bulkInvalid,
         413: errorResponse('Request body too large', { error: 'request entity too large' }),
-        ...authResponses,
         429: rateLimited,
         500: serverError
     }
@@ -212,7 +190,6 @@ registry.registerPath({
         'The file is processed in memory and never stored. No other form fields are accepted.'
     ].join(' '),
     operationId: 'getDomainInfoBulkFile',
-    ...secured,
     request: {
         body: {
             required: true,
@@ -231,7 +208,6 @@ registry.registerPath({
             error: 'Unsupported file type [application/pdf]; upload a text/plain file'
         }),
         413: errorResponse('File too large', { error: 'Invalid upload: File too large' }),
-        ...authResponses,
         429: rateLimited,
         500: serverError
     }
@@ -255,11 +231,7 @@ export const openApiSpec = new OpenApiGeneratorV3(registry.definitions).generate
             '',
             `**Limits:** up to ${config.maxDomainsPerRequest} domains per bulk request, ${config.lookupConcurrency} looked up at a time; ` +
             `${config.rateLimitMax} requests per ${config.rateLimitWindowMs / 1000}s and ${config.lookupBudgetMax} domain lookups per ` +
-            `${config.lookupBudgetWindowMs / 1000}s per client.`,
-            '',
-            authEnabled
-                ? '**Authentication:** required. Send an API key as `Authorization: Bearer <key>` or `X-API-Key: <key>` (use **Authorize** above).'
-                : '**Authentication:** not configured on this server (set `API_KEYS_SHA256` to require API keys).'
+            `${config.lookupBudgetWindowMs / 1000}s per client IP. No authentication is required.`
         ].join('\n')
     },
     servers: [{ url: '/', description: 'This server' }],
