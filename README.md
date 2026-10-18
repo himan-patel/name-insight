@@ -117,10 +117,33 @@ all; copy it to `.env` (gitignored) and run with `node --env-file=.env ./dist/ap
 | `RDAP_TIMEOUT_MS` | `5000` | Hard deadline per RDAP request |
 | `MAX_RDAP_RESPONSE_BYTES` | `262144` | Larger RDAP responses are discarded |
 | `WEB_CHECK_TIMEOUT_MS` | `5000` | Hard deadline for the `insights` HTTPS check |
+| `ANTHROPIC_API_KEY` | _(empty)_ | **Secret.** Enables REST AI suggestions (and the MCP fallback). Set only in the environment; never commit |
+| `AI_MODEL` | `claude-opus-5-5` | Claude model used for suggestions |
+| `AI_EFFORT` | `medium` | Effort level for suggestions (`low`, `medium`, `high`) |
+| `SUGGEST_RATE_LIMIT_MAX` | `5` | Suggestion requests per client IP per rate-limit window |
 
 Numeric values must be non-negative integers; the app refuses to start otherwise.
 
 For example: `API_PORT=3000 npm run start:tsnode`
+
+## AI name suggestions
+
+NameInsight can brainstorm brandable names for a business and then **verify every one** across TLDs with real registry
+lookups, ranking them by availability (.com weighted highest). The model only proposes names; every status comes from
+NameInsight's own lookups.
+
+- **REST:** `POST /api/v1/domains/suggest` with `{ "description": "...", "count": 8, "tlds": ["com","io"], "style": "brandable" }`
+  (`style`: `any`, `brandable`, `descriptive`, `short`, `compound`). Uses the Claude API (`claude-opus-5-5` by default) and
+  is enabled **only when `ANTHROPIC_API_KEY` is set in the server's environment**; otherwise it returns `503`. It is limited
+  to `SUGGEST_RATE_LIMIT_MAX` requests per client IP per window, and its lookups count toward the lookup budget.
+- **MCP:** the `suggest_domains` tool uses **your own AI client's model through MCP sampling** (no key needed on the
+  server). If the client doesn't support sampling, it falls back to the server's Claude API key if one is configured.
+
+> **API keys are secrets.** Set `ANTHROPIC_API_KEY` only in the runtime environment or an untracked `.env` file. Never
+> commit it. NameInsight never logs, stores or returns it.
+
+The business description is treated as untrusted data: it is length-limited, clearly delimited in the prompt, and
+the model can only return names, which are cleaned, validated and checked before anyone sees them.
 
 ## MCP server
 
@@ -156,6 +179,7 @@ claude mcp add nameinsight -- node /absolute/path/to/name-insight/dist/app/mcp/s
 | `check_domain` | One domain: status, confidence, reasons, registration (dates, registrar), DNS and ping. `insights: true` adds nameservers, email setup and HTTPS/TLS; `include_raw_whois: true` adds the raw WHOIS text |
 | `check_domains` | Up to 50 domains at once |
 | `check_name_across_tlds` | One name across TLDs (default `.com .net .org .io .ai .dev .app .co`, or your own list), listing which are available |
+| `suggest_domains` | Brainstorms names for a description (via MCP sampling, or the server's Claude API key), checks them across TLDs and ranks by availability |
 
 All tools are read-only. Results are compact (no raw WHOIS or ping output unless asked) and come with a typed
 `structuredContent` payload plus a one-line summary per domain. Invalid input returns a readable tool error. Logs go to
@@ -254,6 +278,8 @@ app/
 │   ├── whois-parse.ts          # Registration facts from raw WHOIS text
 │   ├── availability.ts         # status / confidence / reasons from all signals
 │   ├── insights.ts             # optional NS, MX/SPF/DMARC and HTTPS/TLS checks
+│   ├── suggestions.ts          # AI name suggestions: prompt, validation, verification, ranking
+│   ├── claude-generator.ts     # Claude API name generator (structured output)
 │   ├── http-client.ts          # HTTPS JSON client: public-address pinning, size cap, deadline
 │   ├── schemas.ts              # zod data contract: types, OpenAPI schemas, MCP inputs
 │   └── errors.ts               # ValidationError (mapped to 400 by the HTTP layer)

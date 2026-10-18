@@ -4,7 +4,9 @@ import { z } from 'zod';
 
 // Internal
 import * as config from '../../config/global.config';
-import { DomainInfoSchema, DomainNameSchema, DomainsPayloadSchema, ErrorResponseSchema } from '../../core';
+import {
+    DomainInfoSchema, DomainNameSchema, DomainsPayloadSchema, ErrorResponseSchema, SuggestionRequestSchema, SuggestionResultSchema
+} from '../../core';
 
 /**
  * OpenAPI 3.0 spec for the NameInsight API, served by Swagger UI at /api-docs.
@@ -238,6 +240,59 @@ registry.registerPath({
         413: errorResponse('File too large', { error: 'Invalid upload: File too large' }),
         429: rateLimited,
         500: serverError
+    }
+});
+
+registry.registerPath({
+    method: 'post',
+    path: '/api/v1/domains/suggest',
+    tags: ['Domains'],
+    summary: 'Suggest available domain names with AI',
+    description: [
+        'Brainstorms names for a business with Claude, then checks every name across the requested TLDs with real registry',
+        'lookups and ranks them by availability (.com weighted highest). Statuses come from NameInsight, not the model.',
+        `Requires the server to have \`ANTHROPIC_API_KEY\` configured (otherwise 503). Limited to ${config.suggestRateLimitMax}`,
+        `requests per ${config.rateLimitWindowMs / 1000}s per client IP; lookups count toward the lookup budget.`
+    ].join(' '),
+    operationId: 'suggestDomains',
+    request: {
+        body: {
+            required: true,
+            content: {
+                'application/json': {
+                    schema: SuggestionRequestSchema.meta({ id: 'SuggestionRequest' }),
+                    example: { description: 'A tool that checks whether domain names are available and explains why', count: 5, tlds: ['com', 'io', 'ai'], style: 'brandable' }
+                }
+            }
+        }
+    },
+    responses: {
+        200: {
+            description: 'Ranked suggestions with per-TLD availability',
+            content: {
+                'application/json': {
+                    schema: SuggestionResultSchema.meta({ id: 'SuggestionResult' }),
+                    example: {
+                        generatedBy: 'claude-api',
+                        suggestions: [{
+                            name: 'nameinsight',
+                            rationale: 'Says exactly what the tool gives you: insight into a name.',
+                            available: ['nameinsight.io', 'nameinsight.ai'],
+                            results: [
+                                { domain: 'nameinsight.com', status: 'registered', confidence: 'high', available: false },
+                                { domain: 'nameinsight.io', status: 'available', confidence: 'high', available: true },
+                                { domain: 'nameinsight.ai', status: 'available', confidence: 'high', available: true }
+                            ]
+                        }]
+                    }
+                }
+            }
+        },
+        400: errorResponse('Invalid request (description missing or too long, bad TLD, count out of range)', { error: 'Invalid suggestion request' }),
+        422: errorResponse('The model declined or returned no usable names', { error: 'The model declined to suggest names for this description' }),
+        429: rateLimited,
+        502: errorResponse('The AI service failed or is busy', { error: 'The AI service failed to respond; please try again' }),
+        503: errorResponse('AI suggestions are not configured on this server', { error: 'AI suggestions are not configured on this server' })
     }
 });
 

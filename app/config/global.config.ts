@@ -77,5 +77,18 @@ export const pingTimeoutSeconds = Math.max(1, intFromEnv('PING_TIMEOUT_SECONDS',
 export const whoisTimeoutMs = intFromEnv('WHOIS_TIMEOUT_MS', 10_000);
 export const maxWhoisResponseBytes = Math.max(1, intFromEnv('MAX_WHOIS_RESPONSE_BYTES', 128 * 1024));
 export const rdapTimeoutMs = intFromEnv('RDAP_TIMEOUT_MS', 5_000);
+
+/**
+ * AI name suggestions via the Claude API are enabled only when ANTHROPIC_API_KEY is set in the environment at runtime.
+ * The key is read by the Anthropic SDK; NameInsight never logs, stores or returns it.
+ */
+export const claudeApiConfigured = Boolean(process.env.ANTHROPIC_API_KEY?.trim());
+export const aiModel = process.env.AI_MODEL || 'claude-opus-5-5';
+const AI_EFFORTS = ['low', 'medium', 'high'] as const;
+export const aiEffort = (AI_EFFORTS as readonly string[]).includes(process.env.AI_EFFORT ?? '')
+    ? process.env.AI_EFFORT as typeof AI_EFFORTS[number]
+    : 'medium';
+/** Suggestion requests allowed per client IP per rate-limit window (each one calls the AI model). */
+export const suggestRateLimitMax = intFromEnv('SUGGEST_RATE_LIMIT_MAX', 5, 1);
 export const webCheckTimeoutMs = intFromEnv('WEB_CHECK_TIMEOUT_MS', 5_000, 1);
 export const maxRdapResponseBytes = Math.max(1, intFromEnv('MAX_RDAP_RESPONSE_BYTES', 256 * 1024));
