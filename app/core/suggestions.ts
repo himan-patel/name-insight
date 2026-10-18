@@ -33,7 +33,7 @@ export interface NormalizedSuggestionRequest {
 
 /** What a model returns: names without TLDs, each with a one-line rationale. */
 export const NameIdeasSchema = z.object({
-    names: z.array(z.object({ name: z.string(), rationale: z.string() }))
+    names: z.array(z.object({ name: z.string().max(100), rationale: z.string().max(500) })).max(50)
 });
 export type NameIdea = z.infer<typeof NameIdeasSchema>['names'][number];
 
@@ -143,8 +143,8 @@ export function parseIdeas(text: string): NameIdea[] {
 
 /** Cleans a model-proposed name into a domain label, or undefined if nothing usable remains. */
 export function toLabel(name: string): string | undefined {
-    const label = name.trim().toLowerCase()
-        .replace(/\.[a-z.]+$/, '')          // drop a TLD the model added anyway
+    // keep only what precedes the first dot (drops a TLD the model added anyway); split avoids regex backtracking
+    const label = name.slice(0, 100).split('.')[0].trim().toLowerCase()
         .replace(/[\s_]+/g, '')
         .replace(/[^a-z0-9-]/g, '')
         .replace(/^-+|-+$/g, '');
@@ -160,7 +160,8 @@ export async function suggestDomains(
     generator: NameGenerator,
     service: DomainService,
     generatedBy: SuggestionResult['generatedBy'],
-    maxLookups = MAX_SUGGESTION_LOOKUPS
+    maxLookups = MAX_SUGGESTION_LOOKUPS,
+    signal?: AbortSignal
 ): Promise<SuggestionResult> {
     const ideas = await generator(request);
     const seen = new Set<string>();
@@ -187,7 +188,7 @@ export async function suggestDomains(
             }
         }
     }
-    const infos = await service.getDomainInfoBulk(domains);
+    const infos = await service.getDomainInfoBulk(domains, { signal });
     const byDomain = new Map(infos.map(info => [info.domain, info]));
 
     const suggestions = namesToCheck.map(candidate => {

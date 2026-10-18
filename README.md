@@ -140,6 +140,8 @@ all; copy it to `.env` (gitignored) and run with `node --env-file=.env ./dist/ap
 | `MAX_DOMAINS_PER_REQUEST` | `50` | Maximum domains in one bulk request |
 | `LOOKUP_CONCURRENCY` | `5` | Domains looked up at the same time within one request |
 | `MAX_CONCURRENT_LOOKUPS` | `20` | Domains looked up at the same time across all requests |
+| `MAX_QUEUED_LOOKUPS` | `100` | Lookups allowed to wait for a slot; beyond this, requests get `503` + `Retry-After` |
+| `MAX_CONCURRENT_REQUESTS_PER_CLIENT` | `2` | Requests one client IP may have in flight on `/api` and `/mcp` |
 | `DNS_SERVERS` | _(system resolvers)_ | Comma-separated DNS server IPs, e.g. `1.1.1.1,8.8.8.8`. Set this when the host's resolver also answers for internal zones |
 | `MAX_BODY_BYTES` | `16384` | Maximum JSON / form body size |
 | `MAX_UPLOAD_BYTES` | `65536` | Maximum uploaded file size |
@@ -154,6 +156,8 @@ all; copy it to `.env` (gitignored) and run with `node --env-file=.env ./dist/ap
 | `AI_MODEL` | `claude-opus-5-5` | Claude model used for suggestions |
 | `AI_EFFORT` | `medium` | Effort level for suggestions (`low`, `medium`, `high`) |
 | `SUGGEST_RATE_LIMIT_MAX` | `5` | Suggestion requests per client IP per rate-limit window (REST and MCP combined) |
+| `GLOBAL_SUGGEST_MAX_PER_HOUR` | `100` | Claude API suggestion calls per hour for the whole process (caps spend on the server key) |
+| `MAX_CONCURRENT_AI_CALLS` | `2` | Claude API calls in flight at once |
 | `MCP_ALLOWED_HOSTS` | _(empty)_ | Comma-separated Host headers accepted by `POST /mcp`; enables DNS-rebinding protection |
 
 Numeric values must be non-negative integers; the app refuses to start otherwise.
@@ -172,6 +176,10 @@ NameInsight's own lookups.
   to `SUGGEST_RATE_LIMIT_MAX` requests per client IP per window, and its lookups count toward the lookup budget.
 - **MCP:** the `suggest_domains` tool uses **your own AI client's model through MCP sampling** (no key needed on the
   server). If the client doesn't support sampling, it falls back to the server's Claude API key if one is configured.
+
+Spend on the server's key is capped by the per-IP suggestion limit, a process-wide hourly limit
+(`GLOBAL_SUGGEST_MAX_PER_HOUR`), a cap on concurrent AI calls, a 30 s timeout and one retry. For a public deployment,
+also set a spend limit in the Anthropic Console, and consider a lower-cost `AI_MODEL`.
 
 > **API keys are secrets.** Set `ANTHROPIC_API_KEY` only in the runtime environment or an untracked `.env` file. Never
 > commit it. NameInsight never logs, stores or returns it.
@@ -293,6 +301,10 @@ On `SIGTERM`/`SIGINT` the server stops accepting connections, lets in-flight loo
 - The `insights` website check connects only to public IPv4 addresses, sends a `HEAD` request (headers only), never
   follows redirects, and accepts invalid certificates only so it can report them (nothing sensitive is sent).
 - A WHOIS failure doesn't fail the request: that domain gets `whois: null` and a `whoisError` message.
+- `POST` bodies must be JSON (`Content-Type: application/json`); other content types get `415`. This stops other
+  websites from triggering requests from their visitors' browsers with plain HTML forms.
+- Each client IP may have a few requests in flight at once (`429` beyond that), and work for a client that
+  disconnects is cancelled. When the server is saturated, requests get `503` with `Retry-After`.
 - Errors are JSON: `{ "error": "message", "details": { ... } }`. Too many requests, or more domains than the
   client's lookup budget allows, returns `429` (the budget response includes `Retry-After`).
 

@@ -11,7 +11,7 @@ import {
     normalizeSuggestionRequest, parseIdeas, suggestDomains, SuggestionRequestSchema, SuggestionResultSchema,
     SuggestionsFailedError, SuggestionsUnavailableError, MAX_SUGGESTION_LOOKUPS
 } from '../core';
-import { errorMessage } from '../utils/async';
+import { AbortedError, errorMessage, QueueFullError } from '../utils/async';
 import { version } from './version';
 
 /** TLDs checked by check_name_across_tlds when none are given. */
@@ -71,6 +71,12 @@ function ok<T extends Record<string, unknown>>(summary: string, structured: T): 
 
 /** Invalid input comes back as a tool error the model can read and correct, not a protocol error. */
 function toolError(error: unknown): CallToolResult {
+    if (error instanceof QueueFullError) {
+        return { isError: true, content: [{ type: 'text', text: 'Server is busy; please retry shortly.' }] };
+    }
+    if (error instanceof AbortedError) {
+        return { isError: true, content: [{ type: 'text', text: 'Request cancelled.' }] };
+    }
     if (error instanceof SuggestionsUnavailableError || error instanceof SuggestionsFailedError || error instanceof ToolLimitError) {
         return { isError: true, content: [{ type: 'text', text: error.message }] };
     }
@@ -103,6 +109,8 @@ export interface ToolLimits {
 
 export interface McpServerOptions {
     limits?: ToolLimits;
+    /** Fires when the HTTP caller disconnects (hosted mode); combined with each tool call's own cancellation signal. */
+    signal?: AbortSignal;
     /** Claude API generator used when the client can't sample; defaults to one that needs ANTHROPIC_API_KEY. */
     claudeGenerator?: NameGenerator;
     claudeConfigured?: boolean;
@@ -127,6 +135,7 @@ export function createMcpServer(service: DomainService = new DomainService(), op
     const claudeGenerator = options.claudeGenerator ?? createClaudeGenerator();
     const claudeConfigured = options.claudeConfigured ?? config.claudeApiConfigured;
     const limits = options.limits;
+    const signalFor = (extra: { signal: AbortSignal }) => options.signal ? AbortSignal.any([extra.signal, options.signal]) : extra.signal;
     const server = new McpServer(
         { name: 'nameinsight', title: config.appName, version },
         {
@@ -148,11 +157,11 @@ export function createMcpServer(service: DomainService = new DomainService(), op
         },
         outputSchema: McpDomainResultSchema,
         annotations: readOnlyAnnotations
-    }, async ({ domain, insights, include_raw_whois }) => {
+    }, async ({ domain, insights, include_raw_whois }, extra) => {
         try {
             const normalized = normalizeDomain(domain);
             limits?.lookups(1);
-            const info = await service.getDomainInfo(normalized, { insights });
+            const info = await service.getDomainInfo(normalized, { insights, signal: signalFor(extra) });
             const result = compact(info, include_raw_whois);
             return ok(summaryLine(result), result);
         } catch (error) {
@@ -169,11 +178,11 @@ export function createMcpServer(service: DomainService = new DomainService(), op
         },
         outputSchema: { results: z.array(McpDomainResultSchema) },
         annotations: readOnlyAnnotations
-    }, async ({ domains, insights }) => {
+    }, async ({ domains, insights }, extra) => {
         try {
             const normalized = normalizeDomainList(domains, config.maxDomainsPerRequest);
             limits?.lookups(normalized.length);
-            const infos = await service.getDomainInfoBulk(normalized, { insights });
+            const infos = await service.getDomainInfoBulk(normalized, { insights, signal: signalFor(extra) });
             const results = infos.map(info => compact(info, false));
             return ok(results.map(summaryLine).join('\n'), { results });
         } catch (error) {
@@ -196,7 +205,7 @@ export function createMcpServer(service: DomainService = new DomainService(), op
             results: z.array(TldSweepRowSchema)
         },
         annotations: readOnlyAnnotations
-    }, async ({ name, tlds }) => {
+    }, async ({ name, tlds }, extra) => {
         try {
             const label = name.trim().toLowerCase();
             if (label.includes('.')) {
@@ -205,7 +214,7 @@ export function createMcpServer(service: DomainService = new DomainService(), op
             const suffixes = [...new Set((tlds ?? DEFAULT_TLDS).map(tld => tld.trim().toLowerCase().replace(/^\./, '')))];
             const domains = normalizeDomainList(suffixes.map(tld => `${label}.${tld}`), MAX_TLDS);
             limits?.lookups(domains.length);
-            const infos = await service.getDomainInfoBulk(domains);
+            const infos = await service.getDomainInfoBulk(domains, { signal: signalFor(extra) });
             const results = infos.map(info => ({
                 domain: info.domain,
                 status: info.status,
@@ -230,21 +239,21 @@ export function createMcpServer(service: DomainService = new DomainService(), op
         inputSchema: SuggestionRequestSchema.shape,
         outputSchema: SuggestionResultSchema,
         annotations: { readOnlyHint: true, idempotentHint: false, openWorldHint: true }
-    }, async args => {
+    }, async (args, extra) => {
         try {
             const request = normalizeSuggestionRequest(args);
-            limits?.suggestion();
-            limits?.lookups(Math.min(request.count * request.tlds.length, MAX_SUGGESTION_LOOKUPS));
             const canSample = Boolean(server.server.getClientCapabilities()?.sampling);
-            let result;
-            if (canSample) {
-                result = await suggestDomains(request, samplingGenerator(server), service, 'mcp-sampling');
-            } else if (claudeConfigured) {
-                result = await suggestDomains(request, claudeGenerator, service, 'claude-api');
-            } else {
+            if (!canSample && !claudeConfigured) {
                 throw new SuggestionsUnavailableError('This MCP client does not support sampling and the server has no Claude API ' +
                     'key configured. Use check_name_across_tlds with names you choose instead.');
             }
+            // charge only once we know a model is available; lookups first so a lookup-budget error doesn't burn a suggestion
+            limits?.lookups(Math.min(request.count * request.tlds.length, MAX_SUGGESTION_LOOKUPS));
+            limits?.suggestion();
+            const signal = signalFor(extra);
+            const result = canSample
+                ? await suggestDomains(request, samplingGenerator(server), service, 'mcp-sampling', MAX_SUGGESTION_LOOKUPS, signal)
+                : await suggestDomains(request, claudeGenerator, service, 'claude-api', MAX_SUGGESTION_LOOKUPS, signal);
             const summary = result.suggestions.map(suggestion =>
                 `${suggestion.name}: ${suggestion.available.length ? `available as ${suggestion.available.join(', ')}` : 'no checked TLD available'}` +
                 ` (${suggestion.rationale})`).join('\n');

@@ -58,6 +58,10 @@ export const lookupConcurrency = Math.max(1, intFromEnv('LOOKUP_CONCURRENCY', 5)
 
 /** Number of domains looked up at the same time across all requests (caps child processes and sockets). */
 export const maxConcurrentLookups = Math.max(1, intFromEnv('MAX_CONCURRENT_LOOKUPS', 20));
+/** Lookups allowed to wait for a slot; beyond this, requests get 503 + Retry-After instead of queueing forever. */
+export const maxQueuedLookups = intFromEnv('MAX_QUEUED_LOOKUPS', 100);
+/** Requests one client IP may have in flight at once on /api and /mcp. */
+export const maxConcurrentRequestsPerClient = intFromEnv('MAX_CONCURRENT_REQUESTS_PER_CLIENT', 2, 1);
 
 /**
  * DNS servers used for domain and WHOIS-server lookups, e.g. "1.1.1.1,8.8.8.8". Empty uses the system resolvers.
@@ -90,6 +94,10 @@ export const aiEffort = (AI_EFFORTS as readonly string[]).includes(process.env.A
     : 'medium';
 /** Suggestion requests allowed per client IP per rate-limit window (each one calls the AI model). */
 export const suggestRateLimitMax = intFromEnv('SUGGEST_RATE_LIMIT_MAX', 5, 1);
+/** Claude API suggestion calls allowed per hour for the whole process (caps spend on the server's key). */
+export const globalSuggestMaxPerHour = intFromEnv('GLOBAL_SUGGEST_MAX_PER_HOUR', 100, 1);
+/** Claude API calls allowed in flight at once. */
+export const maxConcurrentAiCalls = intFromEnv('MAX_CONCURRENT_AI_CALLS', 2, 1);
 
 /** Host headers accepted by the hosted MCP endpoint (enables DNS-rebinding protection), e.g. "mcp.example.com". */
 export const mcpAllowedHosts = listFromEnv('MCP_ALLOWED_HOSTS');
