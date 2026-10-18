@@ -3,7 +3,7 @@ import { BlockList, isIP } from 'net';
 import { domainToASCII } from 'url';
 
 // Internal
-import { HttpError } from '../models/http-error';
+import { ValidationError } from './errors';
 
 const LABEL = '[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?';
 const TLD = '(?:[a-z]{2,63}|xn--[a-z0-9-]{1,59})';
@@ -19,35 +19,35 @@ const RESERVED_SUFFIXES = [
  * Normalizes and validates a public domain name. IP addresses, special-use names and anything that
  * could be read as a command-line option are rejected.
  * @returns the lowercase ASCII (punycode) form of the domain
- * @throws {HttpError} 400 when the input is not a valid public domain name
+ * @throws {ValidationError} when the input is not a valid public domain name
  */
 export function normalizeDomain(input: unknown): string {
     if (typeof input !== 'string') {
-        throw new HttpError(400, 'Domain must be a string');
+        throw new ValidationError('Domain must be a string');
     }
 
     const trimmed = input.trim().replace(/\.$/, '');
     if (trimmed.length === 0 || trimmed.length > 253) {
-        throw new HttpError(400, 'Domain must be between 1 and 253 characters', { domain: input });
+        throw new ValidationError('Domain must be between 1 and 253 characters', { domain: input });
     }
     // domainToASCII silently strips tabs/newlines (WHATWG URL rules), which would look up a different name
     // eslint-disable-next-line no-control-regex -- matching control characters is the point
     if (/[\s\u0000-\u001f\u007f]/.test(trimmed)) {
-        throw new HttpError(400, 'Invalid domain name', { domain: input });
+        throw new ValidationError('Invalid domain name', { domain: input });
     }
     if (isIP(trimmed)) {
-        throw new HttpError(400, 'IP addresses are not accepted; provide a domain name', { domain: input });
+        throw new ValidationError('IP addresses are not accepted; provide a domain name', { domain: input });
     }
 
     // Converts internationalized names to punycode; returns '' for invalid input
     const ascii = domainToASCII(trimmed.toLowerCase());
     if (!ascii || ascii.length > 253 || !DOMAIN_PATTERN.test(ascii)) {
-        throw new HttpError(400, 'Invalid domain name', { domain: input });
+        throw new ValidationError('Invalid domain name', { domain: input });
     }
 
     const isReserved = RESERVED_SUFFIXES.some(suffix => ascii === suffix || ascii.endsWith(`.${suffix}`));
     if (isReserved) {
-        throw new HttpError(400, 'Reserved or internal domain names are not accepted', { domain: input });
+        throw new ValidationError('Reserved or internal domain names are not accepted', { domain: input });
     }
 
     return ascii;
@@ -55,14 +55,14 @@ export function normalizeDomain(input: unknown): string {
 
 /**
  * Normalizes a list of domains, de-duplicating while keeping order.
- * @throws {HttpError} 400 listing every invalid entry, or when the list is empty or too long
+ * @throws {ValidationError} listing every invalid entry, or when the list is empty or too long
  */
 export function normalizeDomainList(input: unknown, maxDomains: number): string[] {
     if (!Array.isArray(input) || input.length === 0) {
-        throw new HttpError(400, 'Provide a non-empty list of domains');
+        throw new ValidationError('Provide a non-empty list of domains');
     }
     if (input.length > maxDomains) {
-        throw new HttpError(400, `Too many domains: ${input.length} provided, maximum is ${maxDomains}`);
+        throw new ValidationError(`Too many domains: ${input.length} provided, maximum is ${maxDomains}`);
     }
 
     const domains: string[] = [];
@@ -71,12 +71,12 @@ export function normalizeDomainList(input: unknown, maxDomains: number): string[
         try {
             domains.push(normalizeDomain(item));
         } catch (error) {
-            invalid.push({ domain: item, reason: error instanceof HttpError ? error.message : 'Invalid domain name' });
+            invalid.push({ domain: item, reason: error instanceof ValidationError ? error.message : 'Invalid domain name' });
         }
     }
 
     if (invalid.length) {
-        throw new HttpError(400, 'One or more domains are invalid', { invalid });
+        throw new ValidationError('One or more domains are invalid', { invalid });
     }
     return Array.from(new Set(domains));
 }

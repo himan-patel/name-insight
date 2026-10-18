@@ -3,10 +3,10 @@ import { isIPv4 } from 'net';
 import * as ping from 'ping';
 
 // Internal
-import * as config from './../config/global.config';
-import { createResolver } from './dns-resolver';
-import { isPublicAddress } from './domain-validation';
-import { whoisLookup } from './whois.client';
+import * as config from '../config/global.config';
+import { createResolver } from './dns';
+import { isPublicAddress } from './validation';
+import { whoisLookup } from './whois';
 import { errorMessage, mapWithConcurrency, Semaphore, withTimeout } from '../utils/async';
 
 /** DNS errors meaning "this name has no records", as opposed to a lookup failure. */

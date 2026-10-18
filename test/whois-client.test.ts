@@ -4,11 +4,11 @@ import { AddressInfo } from 'net';
 import { fakeResolver, FakeRecords } from './helpers/fake-dns';
 
 let records: FakeRecords = {};
-jest.mock('../app/services/dns-resolver', () => ({
+jest.mock('../app/core/dns', () => ({
     createResolver: () => fakeResolver(records)
 }));
 
-import { extractReferral, queryServer, resolvePublicHost, whoisLookup } from '../app/services/whois.client';
+import { extractReferral, queryServer, resolvePublicHost, whoisLookup } from '../app/core/whois';
 
 // Settings come from test/setup-env.ts: WHOIS_TIMEOUT_MS=500, MAX_WHOIS_RESPONSE_BYTES=2048
 

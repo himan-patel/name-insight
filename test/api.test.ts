@@ -3,17 +3,17 @@ import request from 'supertest';
 import { fakeResolver, FakeRecords } from './helpers/fake-dns';
 
 let records: FakeRecords = {};
-jest.mock('../app/services/dns-resolver', () => ({
+jest.mock('../app/core/dns', () => ({
     createResolver: () => fakeResolver(records)
 }));
-jest.mock('../app/services/whois.client', () => ({
+jest.mock('../app/core/whois', () => ({
     whoisLookup: jest.fn(async (domain: string) => `Domain Name: ${domain.toUpperCase()}`)
 }));
 jest.mock('ping', () => ({
     promise: { probe: jest.fn(async (host: string) => ({ host, alive: true, time: 10 })) }
 }));
 
-import { createApp } from '../app/app';
+import { createApp } from '../app/http/app';
 
 const app = createApp();
 const API = '/api/v1/domains/info';

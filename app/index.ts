@@ -1,6 +1,6 @@
 // Internal
 import * as config from './config/global.config';
-import { createApp } from './app';
+import { createApp } from './http/app';
 
 const app = createApp();
 

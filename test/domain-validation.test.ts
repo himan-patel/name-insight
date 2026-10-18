@@ -1,5 +1,5 @@
-import { HttpError } from '../app/models/http-error';
-import { isPublicAddress, normalizeDomain, normalizeDomainList } from '../app/services/domain-validation';
+import { ValidationError } from '../app/core/errors';
+import { isPublicAddress, normalizeDomain, normalizeDomainList } from '../app/core/validation';
 
 describe('normalizeDomain', () => {
     it.each([
@@ -39,7 +39,7 @@ describe('normalizeDomain', () => {
         ['empty', ''],
         ['too long', `${'a.'.repeat(130)}com`]
     ])('rejects %s (%p)', (_, input) => {
-        expect(() => normalizeDomain(input)).toThrow(HttpError);
+        expect(() => normalizeDomain(input)).toThrow(ValidationError);
     });
 
     it.each(['foo.local', 'printer.LOCAL', 'db.internal', 'x.lan', 'a.test', 'b.invalid', 'c.localhost', 'r.home.arpa', 'x.onion'])(
@@ -57,14 +57,14 @@ describe('normalizeDomain', () => {
         expect(() => normalizeDomain(input)).toThrow('Domain must be a string');
     });
 
-    it('returns a 400 HttpError that echoes the input', () => {
+    it('throws a ValidationError that echoes the input', () => {
         try {
             normalizeDomain('10.0.0.1');
             throw new Error('expected to throw');
         } catch (error) {
-            expect(error).toBeInstanceOf(HttpError);
-            expect((error as HttpError).status).toBe(400);
-            expect((error as HttpError).details).toEqual({ domain: '10.0.0.1' });
+            expect(error).toBeInstanceOf(ValidationError);
+            expect((error as ValidationError).name).toBe('ValidationError');
+            expect((error as ValidationError).details).toEqual({ domain: '10.0.0.1' });
         }
     });
 
@@ -99,8 +99,8 @@ describe('normalizeDomainList', () => {
             normalizeDomainList(['example.com', '127.0.0.1', 42, 'printer.local'], 10);
             throw new Error('expected to throw');
         } catch (error) {
-            expect((error as HttpError).status).toBe(400);
-            expect((error as HttpError).details).toEqual({
+            expect((error as ValidationError).name).toBe('ValidationError');
+            expect((error as ValidationError).details).toEqual({
                 invalid: [
                     { domain: '127.0.0.1', reason: 'IP addresses are not accepted; provide a domain name' },
                     { domain: 42, reason: 'Domain must be a string' },

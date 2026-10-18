@@ -110,8 +110,8 @@ With the server running, open:
 Swagger UI lists every endpoint, with sample request bodies, example responses and the response schemas.
 Use **Try it out** to send real requests to your local server.
 
-The spec is written by hand in `app/docs/openapi.ts`. When you add or change an endpoint in
-`app/routes/domain.api.ts`, update the spec to match.
+The spec is written by hand in `app/http/docs/openapi.ts`. When you add or change an endpoint in
+`app/http/routes/domain.api.ts`, update the spec to match.
 
 ## Endpoints
 
@@ -160,22 +160,22 @@ curl -F "file=@domains.txt;type=text/plain" http://localhost:8080/api/v1/domains
 
 ```text
 app/
-├── index.ts                    # Entry point: starts the server
-├── app.ts                      # createApp(): middleware, Swagger mount, routes, error handling
+├── index.ts                    # Entry point: starts the HTTP server
 ├── config/global.config.ts     # Environment-based configuration
-├── docs/openapi.ts             # OpenAPI spec served at /api-docs
-├── models/
-│   ├── enums/                  # Shared enums
-│   └── http-error.ts           # Error type carrying an HTTP status
-├── routes/
-│   ├── index.ts                # Route registration
-│   └── domain.api.ts           # Domain endpoints and file upload handling
-├── services/
-│   ├── domain.service.ts       # DNS, ping and WHOIS per domain; text-file parsing
-│   ├── domain-validation.ts    # Domain name validation and public-IP checks
-│   ├── dns-resolver.ts         # DNS resolver with timeout and optional DNS_SERVERS
-│   └── whois.client.ts         # WHOIS client: referral checks, size cap, hard deadline
-└── utils/async.ts              # Timeout, concurrency and semaphore helpers
+├── core/                       # Transport-independent logic, shared by REST and MCP
+│   ├── index.ts                # Public core API
+│   ├── domain-service.ts       # DNS, ping and WHOIS per domain; text-file parsing
+│   ├── validation.ts           # Domain name validation and public-IP checks
+│   ├── dns.ts                  # DNS resolver with timeout and optional DNS_SERVERS
+│   ├── whois.ts                # WHOIS client: referral checks, size cap, hard deadline
+│   └── errors.ts               # ValidationError (mapped to 400 by the HTTP layer)
+├── http/                       # REST API (Express)
+│   ├── app.ts                  # createApp(): middleware, Swagger mount, routes, error handling
+│   ├── http-error.ts           # Error type carrying an HTTP status
+│   ├── docs/openapi.ts         # OpenAPI spec served at /api-docs
+│   └── routes/                 # Route registration, domain endpoints, file uploads
+├── types/                      # Type declarations for untyped packages
+└── utils/async.ts              # Timeout, concurrency, semaphore and error helpers
 ```
 
 ## Testing
@@ -190,7 +190,7 @@ full git history plus secretlint) on every pull request. Dependabot opens weekly
 
 Tests live in `test/`. DNS, ping and WHOIS are mocked or served by local fake servers, so the suite is fast and
 deterministic. HTTP behavior is tested with [supertest](https://github.com/ladjs/supertest) against
-`createApp()` (`app/app.ts`), which builds the Express app without listening on a port.
+`createApp()` (`app/http/app.ts`), which builds the Express app without listening on a port.
 
 ## Known limitations
 

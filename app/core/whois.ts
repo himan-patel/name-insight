@@ -5,8 +5,8 @@ import whoisServers from 'whois/servers.json';
 
 // Internal
 import * as config from '../config/global.config';
-import { createResolver } from './dns-resolver';
-import { isPublicAddress } from './domain-validation';
+import { createResolver } from './dns';
+import { isPublicAddress } from './validation';
 import { errorMessage } from '../utils/async';
 
 interface WhoisServer {
