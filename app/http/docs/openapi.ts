@@ -33,6 +33,7 @@ const availableExample = {
         skipped: 'not-resolved'
     },
     dns: { addresses: [] },
+    rdap: { registered: false, server: 'rdap.verisign.com' },
     whois: 'No match for domain "ZZQX-UNREGISTERED-TEST-98123.COM".\r\n>>> Last update of whois database: 2026-10-17T18:51:41Z <<<\r\n...',
     available: true,
     domain: 'zzqx-unregistered-test-98123.com'
@@ -54,6 +55,18 @@ const takenExample = {
         numeric_host: '104.20.23.154'
     },
     dns: { addresses: ['104.20.23.154', '172.66.147.243', '2606:4700:10::6814:179a'] },
+    rdap: {
+        registered: true,
+        server: 'rdap.verisign.com',
+        status: ['client delete prohibited', 'client transfer prohibited', 'client update prohibited'],
+        created: '1995-08-14T04:00:00Z',
+        expires: '2027-08-13T04:00:00Z',
+        updated: '2026-08-14T08:01:43Z',
+        registrar: 'RESERVED-Internet Assigned Numbers Authority',
+        registrarIanaId: '376',
+        nameservers: ['elliott.ns.cloudflare.com', 'hera.ns.cloudflare.com'],
+        dnssec: true
+    },
     whois: 'Domain Name: EXAMPLE.COM\r\nRegistry Domain ID: 2336799_DOMAIN_COM-VRSN\r\n...',
     available: false,
     domain: 'example.com'
@@ -232,9 +245,9 @@ export const openApiSpec = new OpenApiGeneratorV3(registry.definitions).generate
         description: [
             'Fetches domain information and estimates availability.',
             '',
-            'Each domain is resolved in **DNS**, **pinged** (first public IPv4 address only) and looked up via **WHOIS**.',
-            '`available` is `true` only when DNS has no A/AAAA records **and** nothing answers the ping.',
-            'This is still an estimate: a registered domain with no address records looks available, so check the `whois` text to confirm.',
+            'Each domain is resolved in **DNS**, looked up over **RDAP** (registry data) and **WHOIS**, and **pinged** (first public IPv4 only).',
+            '`available` is authoritative when the registry answers over RDAP. For TLDs without RDAP it is an estimate: `true` when DNS has',
+            'no A/AAAA records **and** nothing answers the ping. Check the `whois` text to confirm in that case.',
             '',
             '**Input rules:** public domain names only. IP addresses, `localhost`, internal suffixes (`.local`, `.internal`, `.lan`, ...)',
             'and malformed names are rejected with `400`. Internationalized names are converted to punycode.',

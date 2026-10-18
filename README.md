@@ -8,8 +8,10 @@ Express + TypeScript REST service.
 For each domain it:
 
 1. **Resolves** its A and AAAA records in DNS.
-2. **Pings** its first public IPv4 address (via the [`ping`](https://www.npmjs.com/package/ping) package, which runs the system `ping` command).
-3. Runs a **WHOIS** lookup (via the [`whois`](https://www.npmjs.com/package/whois) package).
+2. Queries the registry over **RDAP** (registration status, dates, registrar, nameservers, DNSSEC), using IANA's
+   bootstrap registry to find the right server.
+3. Runs a **WHOIS** lookup (fallback for TLDs without RDAP, such as `.io` and `.de`).
+4. **Pings** its first public IPv4 address (via the [`ping`](https://www.npmjs.com/package/ping) package).
 
 Each result looks like this:
 
@@ -17,20 +19,21 @@ Each result looks like this:
 {
   "probe": { "host": "example.com", "alive": true, "time": 38.9, "numeric_host": "104.20.23.154", "...": "..." },
   "dns": { "addresses": ["104.20.23.154", "2606:4700:10::6814:179a"] },
+  "rdap": { "registered": true, "registrar": "…", "created": "1995-08-14T04:00:00Z", "expires": "2027-08-13T04:00:00Z", "…": "…" },
   "whois": "Domain Name: EXAMPLE.COM\n...",
   "available": false,
   "domain": "example.com"
 }
 ```
 
-> **Note:** `available` is `true` only when DNS has no address records **and** the ping gets no reply. It's still
-> an estimate: a registered domain with no DNS records looks available. To confirm, check the `whois` text
-> (e.g. `No match for domain ...`).
+> **Note:** when the registry answers over RDAP, `available` is authoritative (`rdap.registered`). For TLDs without
+> RDAP it is an estimate: `true` only when DNS has no address records **and** the ping gets no reply; check the
+> `whois` text to confirm (e.g. `No match for domain ...`).
 
 ## Prerequisites
 
 - Node.js 22 or newer (`engines` in package.json) and npm
-- Outbound network access for DNS, ICMP ping and WHOIS (TCP port 43)
+- Outbound network access for DNS, HTTPS (RDAP), ICMP ping and WHOIS (TCP port 43)
 
 ## Getting started
 
@@ -99,6 +102,8 @@ all; copy it to `.env` (gitignored) and run with `node --env-file=.env ./dist/ap
 | `PING_TIMEOUT_SECONDS` | `2` | Ping reply timeout |
 | `WHOIS_TIMEOUT_MS` | `10000` | Hard deadline per WHOIS server (a lookup can follow up to 2 referrals) |
 | `MAX_WHOIS_RESPONSE_BYTES` | `131072` | WHOIS responses longer than this are truncated |
+| `RDAP_TIMEOUT_MS` | `5000` | Hard deadline per RDAP request |
+| `MAX_RDAP_RESPONSE_BYTES` | `262144` | Larger RDAP responses are discarded |
 
 Numeric values must be non-negative integers; the app refuses to start otherwise.
 
@@ -169,6 +174,8 @@ On `SIGTERM`/`SIGINT` the server stops accepting connections, lets in-flight loo
   `dns.nonPublic` is set to `true` instead.
 - WHOIS referrals (the registry pointing to the registrar's WHOIS server) are only followed to public addresses on
   port 43. If the registrar's server fails, the registry's response is returned.
+- RDAP requests use HTTPS only (certificates validated), connect only to public IPv4 addresses, never follow
+  redirects or links, and are size- and time-limited.
 - A WHOIS failure doesn't fail the request: that domain gets `whois: null` and a `whoisError` message.
 - Errors are JSON: `{ "error": "message", "details": { ... } }`. Too many requests, or more domains than the
   client's lookup budget allows, returns `429` (the budget response includes `Retry-After`).
@@ -201,6 +208,8 @@ app/
 │   ├── validation.ts           # Domain name validation and public-IP checks
 │   ├── dns.ts                  # DNS resolver with timeout and optional DNS_SERVERS
 │   ├── whois.ts                # WHOIS client: referral checks, size cap, hard deadline
+│   ├── rdap.ts                 # RDAP client with cached IANA bootstrap
+│   ├── http-client.ts          # HTTPS JSON client: public-address pinning, size cap, deadline
 │   ├── schemas.ts              # zod data contract: types, OpenAPI schemas, MCP inputs
 │   └── errors.ts               # ValidationError (mapped to 400 by the HTTP layer)
 ├── http/                       # REST API (Express)

@@ -6,6 +6,7 @@ import * as ping from 'ping';
 import * as config from '../config/global.config';
 import { createResolver } from './dns';
 import { isPublicAddress } from './validation';
+import { rdapClient, RdapClient } from './rdap';
 import { whoisLookup } from './whois';
 import type { DnsResult, DomainInfo, PingProbe, ProbeSkipReason } from './schemas';
 import { errorMessage, mapWithConcurrency, Semaphore, withTimeout } from '../utils/async';
@@ -18,15 +19,18 @@ const lookupSlots = new Semaphore(config.maxConcurrentLookups);
 
 export class DomainService {
 
+  constructor(private readonly rdap: RdapClient = rdapClient) { }
+
   /**
-   * Looks up a validated domain: DNS resolution, a ping to its first public IPv4 address, and WHOIS.
+   * Looks up a validated domain: DNS resolution, RDAP and WHOIS in parallel, then a ping to its first public IPv4.
    * Never throws for lookup failures; they are reported in the result instead.
    * @param domain normalized domain from `normalizeDomain`
    */
   async getDomainInfo(domain: string): Promise<DomainInfo> {
     return lookupSlots.run(async () => {
-      const [resolved, whoisResult] = await Promise.all([
+      const [resolved, rdap, whoisResult] = await Promise.all([
         this.resolveDomain(domain),
+        this.rdap.lookup(domain),
         this.whoisDomain(domain)
       ]);
       const probe = await this.probeDomain(domain, resolved.addresses);
@@ -43,9 +47,12 @@ export class DomainService {
       return {
         probe,
         dns: dnsResult,
+        rdap,
         ...whoisResult,
-        // Available only when DNS confirms there are no records and nothing answers
-        available: !resolved.error && resolved.addresses.length === 0 && !probe.alive,
+        // The registry's RDAP answer is authoritative; otherwise estimate from DNS records and ping
+        available: rdap.registered !== null
+          ? !rdap.registered
+          : !resolved.error && resolved.addresses.length === 0 && !probe.alive,
         domain
       };
     });
