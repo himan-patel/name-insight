@@ -1,19 +1,20 @@
 // Internal
 import * as config from './config/global.config';
 import { createApp } from './http/app';
+import { checkExposure } from './http/auth';
 import { startServer } from './http/server';
 
 async function main() {
     console.info(`Server.start :: Starting ${config.appName}...`);
+    const exposureWarning = checkExposure({ host: config.host, keyCount: config.apiKeyHashes.length, authDisabled: config.authDisabled });
     const { shutdown } = await startServer(createApp(), {
         port: config.port,
         host: config.host,
         shutdownTimeoutMs: config.shutdownTimeoutMs
     });
     console.info(`Server.start :: Service listening on ${config.host}:${config.port}`);
-    if (!config.apiKeyHashes.length && !['127.0.0.1', '::1', 'localhost'].includes(config.host)) {
-        console.warn('Server.start :: WARNING: no API keys configured (API_KEYS_SHA256) and the server is reachable beyond ' +
-            'localhost. Anyone who can reach it can use it. Set API_KEYS_SHA256, or API_HOST=127.0.0.1 for local use.');
+    if (exposureWarning) {
+        console.warn(`Server.start :: WARNING: ${exposureWarning}`);
     }
 
     let stopping = false;

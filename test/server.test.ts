@@ -11,13 +11,24 @@ import { createApp } from '../app/http/app';
 import { lifecycle } from '../app/http/lifecycle';
 import { startServer } from '../app/http/server';
 
-afterEach(() => lifecycle.reset());
+const routeTimers = new Set<NodeJS.Timeout>();
+
+afterEach(() => {
+    lifecycle.reset();
+    // a force-closed request leaves its route timer pending; clear them so Jest can exit cleanly
+    routeTimers.forEach(timer => clearTimeout(timer));
+    routeTimers.clear();
+});
 
 /** An app with a route that takes `ms` to respond, standing in for a slow lookup. */
 function slowApp() {
     const app = express();
     app.get('/slow/:ms', (req, res) => {
-        setTimeout(() => res.json({ done: true }), Number(req.params.ms));
+        const timer = setTimeout(() => {
+            routeTimers.delete(timer);
+            res.json({ done: true });
+        }, Number(req.params.ms));
+        routeTimers.add(timer);
     });
     return app;
 }

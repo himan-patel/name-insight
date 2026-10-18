@@ -1,14 +1,14 @@
 // Public
 import { isIP } from 'net';
 
-function intFromEnv(name: string, defaultValue: number): number {
+function intFromEnv(name: string, defaultValue: number, min = 0): number {
     const raw = process.env[name];
     if (raw === undefined || raw === '') {
         return defaultValue;
     }
     const value = Number(raw);
-    if (!Number.isInteger(value) || value < 0) {
-        throw new Error(`Invalid value for ${name}: expected a non-negative integer, got "${raw}"`);
+    if (!Number.isInteger(value) || value < min) {
+        throw new Error(`Invalid value for ${name}: expected an integer of at least ${min}, got "${raw}"`);
     }
     return value;
 }
@@ -21,7 +21,8 @@ function listFromEnv(name: string): string[] {
 }
 
 export const appName = process.env.APP_NAME || 'NameInsight';
-export const host = process.env.API_HOST || '0.0.0.0';
+/** Bind address. Defaults to loopback; set API_HOST=0.0.0.0 (with API_KEYS_SHA256) to serve other machines. */
+export const host = process.env.API_HOST || '127.0.0.1';
 export const port = intFromEnv('API_PORT', 8080);
 
 /** Set LOG_REQUESTS=false to turn off the per-request access log (e.g. in tests). */
@@ -47,15 +48,25 @@ if (invalidApiKeyHash !== undefined) {
 }
 
 /** Domains each client may look up per window across all requests (bulk requests cost one per domain). */
-export const lookupBudgetMax = intFromEnv('LOOKUP_BUDGET_MAX', 200);
-export const lookupBudgetWindowMs = intFromEnv('LOOKUP_BUDGET_WINDOW_MS', 60_000);
+export const lookupBudgetMax = intFromEnv('LOOKUP_BUDGET_MAX', 200, 1);
+export const lookupBudgetWindowMs = intFromEnv('LOOKUP_BUDGET_WINDOW_MS', 60_000, 1);
+
+/**
+ * Set AUTH_DISABLED=true to deliberately serve a non-loopback address without API keys (e.g. behind a private
+ * network or an authenticating proxy). Without it, the server refuses to start in that configuration.
+ */
+export const authDisabled = process.env.AUTH_DISABLED === 'true';
 
 /** Requests allowed per client (API key, or IP when unauthenticated) per window on the domain endpoints. */
-export const rateLimitWindowMs = intFromEnv('RATE_LIMIT_WINDOW_MS', 60_000);
-export const rateLimitMax = intFromEnv('RATE_LIMIT_MAX', 30);
+export const rateLimitWindowMs = intFromEnv('RATE_LIMIT_WINDOW_MS', 60_000, 1);
+export const rateLimitMax = intFromEnv('RATE_LIMIT_MAX', 30, 1);
 
 /** Maximum domains accepted in a single bulk request (payload or file). */
-export const maxDomainsPerRequest = intFromEnv('MAX_DOMAINS_PER_REQUEST', 50);
+export const maxDomainsPerRequest = intFromEnv('MAX_DOMAINS_PER_REQUEST', 50, 1);
+if (lookupBudgetMax < maxDomainsPerRequest) {
+    throw new Error(`LOOKUP_BUDGET_MAX (${lookupBudgetMax}) must be at least MAX_DOMAINS_PER_REQUEST (${maxDomainsPerRequest}), ` +
+        'or the largest bulk requests could never succeed');
+}
 
 /** Number of domains looked up at the same time within one request. */
 export const lookupConcurrency = Math.max(1, intFromEnv('LOOKUP_CONCURRENCY', 5));
