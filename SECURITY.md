@@ -29,7 +29,7 @@ In scope, for example:
 
 - reaching private, loopback or link-local addresses (SSRF), including through DNS or WHOIS referrals
 - command or argument injection into `ping` or other subprocesses
-- bypassing input validation, body/upload size limits, rate limits or authentication
+- bypassing input validation, body/upload size limits, rate limits, the lookup budget or API-key authentication
 - denial of service through a single request (memory, sockets, processes)
 - leaking secrets, internal addresses or stack traces in responses or logs
 

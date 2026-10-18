@@ -13,6 +13,7 @@ import * as config from '../config/global.config';
 import { Routes } from './routes/index';
 import { openApiSpec } from './docs/openapi';
 import { ValidationError } from '../core';
+import { apiKeyAuth, clientKey } from './auth';
 import { HttpError } from './http-error';
 import { lifecycle } from './lifecycle';
 
@@ -70,12 +71,15 @@ export function createApp(): express.Application {
     app.get('/api-docs.json', (req, res) => res.json(openApiSpec));
     app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(openApiSpec, { customSiteTitle: `${config.appName} API docs` }));
 
-    // per-client rate limit on the domain endpoints (each request triggers outbound DNS, ping and WHOIS)
+    // API key authentication (enabled when API_KEYS_SHA256 is set), then a per-client request limit
+    // (each request triggers outbound DNS, ping and WHOIS). Clients are API keys, or IPs when unauthenticated.
+    app.use('/api/', apiKeyAuth(config.apiKeyHashes));
     app.use('/api/', rateLimit({
         windowMs: config.rateLimitWindowMs,
         limit: config.rateLimitMax,
         standardHeaders: 'draft-8',
         legacyHeaders: false,
+        keyGenerator: clientKey,
         message: { error: 'Too many requests, please try again later.' }
     }));
 

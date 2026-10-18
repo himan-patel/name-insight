@@ -36,7 +36,21 @@ export const corsOrigins = listFromEnv('CORS_ORIGINS');
 /** Number of reverse proxies in front of the service, so rate limiting sees the real client IP. 0 = none. */
 export const trustProxyHops = intFromEnv('TRUST_PROXY_HOPS', 0);
 
-/** Requests allowed per client IP per window on the domain endpoints. */
+/**
+ * SHA-256 hex digests of valid API keys (comma-separated). When set, /api/* requires a key; raw keys are
+ * never stored. Generate a key and its digest with `npm run generate-api-key`.
+ */
+export const apiKeyHashes = listFromEnv('API_KEYS_SHA256').map(hash => hash.toLowerCase());
+const invalidApiKeyHash = apiKeyHashes.find(hash => !/^[0-9a-f]{64}$/.test(hash));
+if (invalidApiKeyHash !== undefined) {
+    throw new Error('Invalid value in API_KEYS_SHA256: each entry must be a 64-character SHA-256 hex digest');
+}
+
+/** Domains each client may look up per window across all requests (bulk requests cost one per domain). */
+export const lookupBudgetMax = intFromEnv('LOOKUP_BUDGET_MAX', 200);
+export const lookupBudgetWindowMs = intFromEnv('LOOKUP_BUDGET_WINDOW_MS', 60_000);
+
+/** Requests allowed per client (API key, or IP when unauthenticated) per window on the domain endpoints. */
 export const rateLimitWindowMs = intFromEnv('RATE_LIMIT_WINDOW_MS', 60_000);
 export const rateLimitMax = intFromEnv('RATE_LIMIT_MAX', 30);
 

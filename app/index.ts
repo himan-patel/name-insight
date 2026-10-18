@@ -11,6 +11,10 @@ async function main() {
         shutdownTimeoutMs: config.shutdownTimeoutMs
     });
     console.info(`Server.start :: Service listening on ${config.host}:${config.port}`);
+    if (!config.apiKeyHashes.length && !['127.0.0.1', '::1', 'localhost'].includes(config.host)) {
+        console.warn('Server.start :: WARNING: no API keys configured (API_KEYS_SHA256) and the server is reachable beyond ' +
+            'localhost. Anyone who can reach it can use it. Set API_KEYS_SHA256, or API_HOST=127.0.0.1 for local use.');
+    }
 
     let stopping = false;
     const onSignal = (signal: string) => {
