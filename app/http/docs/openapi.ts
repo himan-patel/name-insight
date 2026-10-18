@@ -1,10 +1,22 @@
+// Public
+import { OpenApiGeneratorV3, OpenAPIRegistry, ResponseConfig } from '@asteasolutions/zod-to-openapi';
+import { z } from 'zod';
+
 // Internal
 import * as config from '../../config/global.config';
+import { DomainInfoSchema, DomainNameSchema, DomainsPayloadSchema, ErrorResponseSchema } from '../../core';
 
 /**
  * OpenAPI 3.0 spec for the NameInsight API, served by Swagger UI at /api-docs.
- * Keep this in sync with app/http/routes/domain.api.ts when endpoints change.
+ * Request and response schemas are generated from the zod contract in app/core/schemas.ts; this file adds
+ * paths, descriptions and examples. Keep paths in sync with app/http/routes when endpoints change.
  */
+
+const registry = new OpenAPIRegistry();
+// `.meta({ id })` names a schema so it is emitted once under components/schemas and referenced by $ref
+const DomainInfo = DomainInfoSchema.meta({ id: 'DomainInfo' });
+const ErrorResponse = ErrorResponseSchema.meta({ id: 'Error' });
+const DomainsPayload = DomainsPayloadSchema.meta({ id: 'DomainsPayload' });
 
 const availableExample = {
     probe: {
@@ -38,6 +50,7 @@ const takenExample = {
         avg: '38.938',
         stddev: '0.000',
         packetLoss: '0.000',
+        inputHost: '104.20.23.154',
         numeric_host: '104.20.23.154'
     },
     dns: { addresses: ['104.20.23.154', '172.66.147.243', '2606:4700:10::6814:179a'] },
@@ -46,14 +59,12 @@ const takenExample = {
     domain: 'example.com'
 };
 
-const errorResponse = (description: string, example: object) => ({
+/** The examples are checked against the schemas in the test suite. */
+export const examples = { availableExample, takenExample };
+
+const errorResponse = (description: string, example: object): ResponseConfig => ({
     description,
-    content: {
-        'application/json': {
-            schema: { $ref: '#/components/schemas/Error' },
-            example
-        }
-    }
+    content: { 'application/json': { schema: ErrorResponse, example } }
 });
 
 const serverError = errorResponse(
@@ -77,17 +88,117 @@ const bulkInvalid = errorResponse('The list is empty, too long, or contains inva
     }
 });
 
-const bulkSuccess = {
+const bulkSuccess: ResponseConfig = {
     description: 'One result per unique domain, in input order. Duplicates (after normalization) are removed.',
-    content: {
-        'application/json': {
-            schema: { type: 'array', items: { $ref: '#/components/schemas/DomainInfo' } },
-            example: [takenExample, availableExample]
-        }
-    }
+    content: { 'application/json': { schema: z.array(DomainInfo), example: [takenExample, availableExample] } }
 };
 
-export const openApiSpec = {
+const HealthSchema = z.object({ status: z.enum(['ok', 'shutting-down']) });
+
+registry.registerPath({
+    method: 'get',
+    path: '/healthz',
+    tags: ['Operations'],
+    summary: 'Health check',
+    description: 'Returns 200 while the service is running and 503 once graceful shutdown has started. Not rate limited.',
+    operationId: 'getHealth',
+    responses: {
+        200: { description: 'Running', content: { 'application/json': { schema: HealthSchema, example: { status: 'ok' } } } },
+        503: { description: 'Shutting down', content: { 'application/json': { schema: HealthSchema, example: { status: 'shutting-down' } } } }
+    }
+});
+
+registry.registerPath({
+    method: 'get',
+    path: '/api/v1/domains/info/{domain}',
+    tags: ['Domains'],
+    summary: 'Look up a single domain',
+    operationId: 'getDomainInfo',
+    request: { params: z.object({ domain: DomainNameSchema.meta({ example: 'example.com' }) }) },
+    responses: {
+        200: {
+            description: 'DNS, ping and WHOIS result for the domain',
+            content: {
+                'application/json': {
+                    schema: DomainInfo,
+                    examples: {
+                        taken: { summary: 'Domain resolves and responds (taken)', value: takenExample },
+                        available: { summary: 'No DNS records, no reply (likely available)', value: availableExample }
+                    }
+                }
+            }
+        },
+        400: errorResponse('Invalid, reserved or IP-address input', {
+            error: 'IP addresses are not accepted; provide a domain name',
+            details: { domain: '10.0.0.1' }
+        }),
+        429: rateLimited,
+        500: serverError
+    }
+});
+
+registry.registerPath({
+    method: 'post',
+    path: '/api/v1/domains/info/_payload',
+    tags: ['Domains'],
+    summary: 'Look up multiple domains from a JSON body',
+    operationId: 'getDomainInfoBulkPayload',
+    request: {
+        body: {
+            required: true,
+            description: `JSON body, at most ${config.maxBodyBytes / 1024} KB`,
+            content: {
+                'application/json': {
+                    schema: DomainsPayload,
+                    example: { domains: ['example.com', 'zzqx-unregistered-test-98123.com'] }
+                }
+            }
+        }
+    },
+    responses: {
+        200: bulkSuccess,
+        400: bulkInvalid,
+        413: errorResponse('Request body too large', { error: 'request entity too large' }),
+        429: rateLimited,
+        500: serverError
+    }
+});
+
+registry.registerPath({
+    method: 'post',
+    path: '/api/v1/domains/info/_file',
+    tags: ['Domains'],
+    summary: 'Look up multiple domains from an uploaded text file',
+    description: [
+        `Upload a \`text/plain\` file (max ${config.maxUploadBytes / 1024} KB) with one domain per line.`,
+        `Blank lines and lines starting with \`#\` are ignored. At most ${config.maxDomainsPerRequest} domains.`,
+        'The file is processed in memory and never stored. No other form fields are accepted.'
+    ].join(' '),
+    operationId: 'getDomainInfoBulkFile',
+    request: {
+        body: {
+            required: true,
+            content: {
+                'multipart/form-data': {
+                    schema: z.object({
+                        file: z.string().meta({ format: 'binary', description: 'Plain-text file (.txt), one domain per line' })
+                    })
+                }
+            }
+        }
+    },
+    responses: {
+        200: bulkSuccess,
+        400: errorResponse('Missing file, wrong file type, extra form fields, or invalid domains in the file', {
+            error: 'Unsupported file type [application/pdf]; upload a text/plain file'
+        }),
+        413: errorResponse('File too large', { error: 'Invalid upload: File too large' }),
+        429: rateLimited,
+        500: serverError
+    }
+});
+
+export const openApiSpec = new OpenApiGeneratorV3(registry.definitions).generateDocument({
     openapi: '3.0.3',
     info: {
         title: config.appName,
@@ -109,209 +220,7 @@ export const openApiSpec = {
     },
     servers: [{ url: '/', description: 'This server' }],
     tags: [
-        { name: 'Domains', description: 'Domain lookup and availability' },
-        { name: 'Operations', description: 'Health and operational endpoints' }
-    ],
-    paths: {
-        '/healthz': {
-            get: {
-                tags: ['Operations'],
-                summary: 'Health check',
-                description: 'Returns 200 while the service is running and 503 once graceful shutdown has started. Not rate limited.',
-                operationId: 'getHealth',
-                responses: {
-                    200: { description: 'Running', content: { 'application/json': { example: { status: 'ok' } } } },
-                    503: { description: 'Shutting down', content: { 'application/json': { example: { status: 'shutting-down' } } } }
-                }
-            }
-        },
-        '/api/v1/domains/info/{domain}': {
-            get: {
-                tags: ['Domains'],
-                summary: 'Look up a single domain',
-                operationId: 'getDomainInfo',
-                parameters: [{
-                    name: 'domain',
-                    in: 'path',
-                    required: true,
-                    description: 'Public domain name (not an IP address)',
-                    schema: { type: 'string', maxLength: 253 },
-                    example: 'example.com'
-                }],
-                responses: {
-                    200: {
-                        description: 'DNS, ping and WHOIS result for the domain',
-                        content: {
-                            'application/json': {
-                                schema: { $ref: '#/components/schemas/DomainInfo' },
-                                examples: {
-                                    taken: { summary: 'Domain resolves and responds (taken)', value: takenExample },
-                                    available: { summary: 'No DNS records, no reply (likely available)', value: availableExample }
-                                }
-                            }
-                        }
-                    },
-                    400: errorResponse('Invalid, reserved or IP-address input', {
-                        error: 'IP addresses are not accepted; provide a domain name',
-                        details: { domain: '10.0.0.1' }
-                    }),
-                    429: rateLimited,
-                    500: serverError
-                }
-            }
-        },
-        '/api/v1/domains/info/_payload': {
-            post: {
-                tags: ['Domains'],
-                summary: 'Look up multiple domains from a JSON body',
-                operationId: 'getDomainInfoBulkPayload',
-                requestBody: {
-                    required: true,
-                    description: `JSON body, at most ${config.maxBodyBytes / 1024} KB`,
-                    content: {
-                        'application/json': {
-                            schema: { $ref: '#/components/schemas/DomainsPayload' },
-                            example: { domains: ['example.com', 'zzqx-unregistered-test-98123.com'] }
-                        }
-                    }
-                },
-                responses: {
-                    200: bulkSuccess,
-                    400: bulkInvalid,
-                    413: errorResponse('Request body too large', { error: 'request entity too large' }),
-                    429: rateLimited,
-                    500: serverError
-                }
-            }
-        },
-        '/api/v1/domains/info/_file': {
-            post: {
-                tags: ['Domains'],
-                summary: 'Look up multiple domains from an uploaded text file',
-                description: [
-                    `Upload a \`text/plain\` file (max ${config.maxUploadBytes / 1024} KB) with one domain per line.`,
-                    `Blank lines and lines starting with \`#\` are ignored. At most ${config.maxDomainsPerRequest} domains.`,
-                    'The file is processed in memory and never stored. No other form fields are accepted.'
-                ].join(' '),
-                operationId: 'getDomainInfoBulkFile',
-                requestBody: {
-                    required: true,
-                    content: {
-                        'multipart/form-data': {
-                            schema: {
-                                type: 'object',
-                                required: ['file'],
-                                properties: {
-                                    file: {
-                                        type: 'string',
-                                        format: 'binary',
-                                        description: 'Plain-text file (.txt), one domain per line'
-                                    }
-                                }
-                            }
-                        }
-                    }
-                },
-                responses: {
-                    200: bulkSuccess,
-                    400: errorResponse('Missing file, wrong file type, extra form fields, or invalid domains in the file', {
-                        error: 'Unsupported file type [application/pdf]; upload a text/plain file'
-                    }),
-                    413: errorResponse('File too large', { error: 'Invalid upload: File too large' }),
-                    429: rateLimited,
-                    500: serverError
-                }
-            }
-        }
-    },
-    components: {
-        schemas: {
-            DomainsPayload: {
-                type: 'object',
-                required: ['domains'],
-                properties: {
-                    domains: {
-                        type: 'array',
-                        minItems: 1,
-                        maxItems: config.maxDomainsPerRequest,
-                        items: { type: 'string', maxLength: 253 },
-                        description: 'Public domain names'
-                    }
-                }
-            },
-            DomainInfo: {
-                type: 'object',
-                required: ['probe', 'dns', 'whois', 'available', 'domain'],
-                properties: {
-                    probe: { $ref: '#/components/schemas/PingProbe' },
-                    dns: { $ref: '#/components/schemas/DnsResult' },
-                    whois: {
-                        type: 'string',
-                        nullable: true,
-                        description: "Raw WHOIS text: the registrar's response, or the registry's if the registrar lookup failed. " +
-                            `Truncated at ${config.maxWhoisResponseBytes / 1024} KB. null if WHOIS failed.`
-                    },
-                    whoisError: {
-                        type: 'string',
-                        enum: ['WHOIS lookup timed out', 'WHOIS lookup failed'],
-                        description: 'Present only when `whois` is null'
-                    },
-                    available: {
-                        type: 'boolean',
-                        description: 'true when DNS has no A/AAAA records and nothing answers the ping (estimate, see API description)'
-                    },
-                    domain: { type: 'string', description: 'Normalized domain (lowercase, punycode)' }
-                }
-            },
-            DnsResult: {
-                type: 'object',
-                required: ['addresses'],
-                properties: {
-                    addresses: {
-                        type: 'array',
-                        items: { type: 'string' },
-                        description: 'Resolved public IPv4 and IPv6 addresses. Private and reserved addresses are never listed.'
-                    },
-                    nonPublic: {
-                        type: 'boolean',
-                        description: 'Present (true) when the domain also resolved to private or reserved addresses, which are omitted'
-                    },
-                    error: {
-                        type: 'string',
-                        description: 'Present when DNS could not be queried (e.g. timeout). `available` is then false.'
-                    }
-                }
-            },
-            PingProbe: {
-                type: 'object',
-                description: 'Ping result from the `ping` package. Fields are `"unknown"` when no reply was received or no ping was sent.',
-                properties: {
-                    host: { type: 'string', description: 'The domain' },
-                    alive: { type: 'boolean' },
-                    output: { type: 'string', description: 'Raw ping command output' },
-                    time: { oneOf: [{ type: 'number' }, { type: 'string' }], description: 'Round-trip time in ms, or "unknown"' },
-                    times: { type: 'array', items: { type: 'number' } },
-                    min: { type: 'string' },
-                    max: { type: 'string' },
-                    avg: { type: 'string' },
-                    stddev: { type: 'string' },
-                    packetLoss: { type: 'string' },
-                    numeric_host: { type: 'string', description: 'IPv4 address that was pinged (present only when a ping was sent)' },
-                    skipped: {
-                        type: 'string',
-                        enum: ['not-resolved', 'no-ipv4-address', 'non-public-address', 'ping-failed'],
-                        description: 'Why no ping result is available (present only when no ping was sent or it failed)'
-                    }
-                }
-            },
-            Error: {
-                type: 'object',
-                required: ['error'],
-                properties: {
-                    error: { type: 'string', description: 'Human-readable message' },
-                    details: { type: 'object', description: 'Extra context, e.g. the list of invalid domains' }
-                }
-            }
-        }
-    }
-};
+        { name: 'Operations', description: 'Health and operational endpoints' },
+        { name: 'Domains', description: 'Domain lookup and availability' }
+    ]
+});

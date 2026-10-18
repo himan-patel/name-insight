@@ -7,6 +7,7 @@ import * as config from '../config/global.config';
 import { createResolver } from './dns';
 import { isPublicAddress } from './validation';
 import { whoisLookup } from './whois';
+import type { DnsResult, DomainInfo, PingProbe, ProbeSkipReason } from './schemas';
 import { errorMessage, mapWithConcurrency, Semaphore, withTimeout } from '../utils/async';
 
 /** DNS errors meaning "this name has no records", as opposed to a lookup failure. */
@@ -14,30 +15,6 @@ const NO_RECORDS_CODES = ['ENOTFOUND', 'ENODATA'];
 
 /** Caps lookups in flight across all requests (each spawns a ping process and opens sockets). */
 const lookupSlots = new Semaphore(config.maxConcurrentLookups);
-
-export interface DnsResult {
-  /** Public addresses only; private/reserved answers are never returned to clients. */
-  addresses: string[];
-  /** true when the domain also resolved to private or reserved addresses (not listed). */
-  nonPublic?: boolean;
-  error?: string;
-}
-
-/** Ping result from the `ping` library, or the same shape with `skipped` set when no ping was sent. */
-export interface PingProbe extends Omit<Partial<ping.PingResponse>, 'host' | 'alive'> {
-  host: string;
-  alive: boolean;
-  skipped?: string;
-}
-
-export interface DomainInfo {
-  probe: PingProbe;
-  dns: DnsResult;
-  whois: string | null;
-  whoisError?: string;
-  available: boolean;
-  domain: string;
-}
 
 export class DomainService {
 
@@ -131,7 +108,7 @@ export class DomainService {
   /**
    * Gets raw WHOIS text (see `whoisLookup`). Failures are returned as `whoisError` rather than thrown.
    */
-  async whoisDomain(domain: string): Promise<{ whois: string | null, whoisError?: string }> {
+  async whoisDomain(domain: string): Promise<Pick<DomainInfo, 'whois' | 'whoisError'>> {
     try {
       return { whois: await whoisLookup(domain) };
     } catch (error) {
@@ -143,7 +120,7 @@ export class DomainService {
   }
 
   /** Probe result in the same shape the ping library returns for an unreachable host. */
-  private skippedProbe(domain: string, skipped: string): PingProbe {
+  private skippedProbe(domain: string, skipped: ProbeSkipReason): PingProbe {
     return {
       host: domain,
       alive: false,
