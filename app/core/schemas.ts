@@ -123,6 +123,9 @@ export const DomainInfoSchema = z.object({
     whoisError: z.enum(WHOIS_ERRORS).optional().describe('Present only when `whois` is null'),
     available: z.boolean().describe('Shorthand for status === "available" (see `confidence` for how sure it is)'),
     domain: z.string().describe('Normalized domain (lowercase, punycode)'),
+    registrableDomain: z.string()
+        .describe('The registered domain this name belongs to (Public Suffix List), e.g. bbc.co.uk for news.bbc.co.uk. ' +
+            'Registry data and status refer to it.'),
     insights: InsightsSchema.optional(),
     ...AssessmentSchema.shape
 });

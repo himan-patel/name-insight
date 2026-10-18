@@ -5,7 +5,7 @@ import * as ping from 'ping';
 // Internal
 import * as config from '../config/global.config';
 import { createResolver } from './dns';
-import { isPublicAddress } from './validation';
+import { isPublicAddress, registrableDomain } from './validation';
 import { assessAvailability } from './availability';
 import { getInsights } from './insights';
 import { rdapClient, RdapClient } from './rdap';
@@ -36,10 +36,12 @@ export class DomainService {
    */
   async getDomainInfo(domain: string, options: LookupOptions = {}): Promise<DomainInfo> {
     return lookupSlots.run(async () => {
+      // registries only know registrable domains (bbc.co.uk), so RDAP/WHOIS use that; DNS/ping/web use the full name
+      const registrable = registrableDomain(domain);
       const [resolved, rdap, whoisResult] = await Promise.all([
         this.resolveDomain(domain),
-        this.rdap.lookup(domain),
-        this.whoisDomain(domain)
+        this.rdap.lookup(registrable),
+        this.whoisDomain(registrable)
       ]);
       const probe = await this.probeDomain(domain, resolved.addresses);
 
@@ -58,11 +60,13 @@ export class DomainService {
       }
 
       const assessment = assessAvailability({
-        rdap, whois: parseWhois(whoisResult.whois), dns: dnsResult, probe, dnsNameservers: insights?.nameservers
+        rdap, whois: parseWhois(whoisResult.whois), dns: dnsResult, probe, dnsNameservers: insights?.nameservers,
+        subdomainOf: registrable !== domain ? registrable : undefined
       });
 
       return {
         domain,
+        registrableDomain: registrable,
         ...assessment,
         available: assessment.status === 'available',
         probe,

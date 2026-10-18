@@ -156,6 +156,9 @@ On `SIGTERM`/`SIGINT` the server stops accepting connections, lets in-flight loo
 
 ### Input rules and errors
 
+- Subdomains are accepted: registry data and `status` refer to the **registrable domain** (Public Suffix List), e.g.
+  `news.bbc.co.uk` is looked up as `bbc.co.uk` (returned as `registrableDomain`), while DNS and web checks use the full
+  name. Public suffixes themselves (`co.uk`, `com.au`) are rejected.
 - Only **public domain names** are accepted. IP addresses, `localhost`, internal suffixes (`.local`, `.internal`,
   `.lan`, `.test`, ...) and malformed names are rejected with `400`. Internationalized names (e.g. `münchen.de`)
   are converted to punycode.

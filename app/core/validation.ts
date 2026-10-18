@@ -1,5 +1,6 @@
 // Public
 import { BlockList, isIP } from 'net';
+import { getDomain } from 'tldts';
 import { domainToASCII } from 'url';
 
 // Internal
@@ -50,7 +51,20 @@ export function normalizeDomain(input: unknown): string {
         throw new ValidationError('Reserved or internal domain names are not accepted', { domain: input });
     }
 
+    if (!getDomain(ascii, { allowPrivateDomains: false })) {
+        throw new ValidationError('This is a public suffix (like co.uk), not a registrable domain', { domain: input });
+    }
+
     return ascii;
+}
+
+/**
+ * The domain a registrant actually registers, per the Public Suffix List (ICANN section): news.bbc.co.uk -> bbc.co.uk.
+ * Registry lookups (RDAP, WHOIS) must use this; DNS, ping and web checks use the full name.
+ * @param domain a name already accepted by `normalizeDomain`
+ */
+export function registrableDomain(domain: string): string {
+    return getDomain(domain, { allowPrivateDomains: false }) ?? domain;
 }
 
 /**
