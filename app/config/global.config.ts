@@ -99,7 +99,10 @@ export const globalSuggestMaxPerHour = intFromEnv('GLOBAL_SUGGEST_MAX_PER_HOUR',
 /** Claude API calls allowed in flight at once. */
 export const maxConcurrentAiCalls = intFromEnv('MAX_CONCURRENT_AI_CALLS', 2, 1);
 
-/** Host headers accepted by the hosted MCP endpoint (enables DNS-rebinding protection), e.g. "mcp.example.com". */
-export const mcpAllowedHosts = listFromEnv('MCP_ALLOWED_HOSTS');
+/**
+ * Host headers the server accepts, e.g. "nameinsight.example.com" (DNS-rebinding protection). When empty and the
+ * server is bound to loopback, only localhost names are accepted. MCP_ALLOWED_HOSTS is accepted as an older alias.
+ */
+export const allowedHosts = [...listFromEnv('ALLOWED_HOSTS'), ...listFromEnv('MCP_ALLOWED_HOSTS')].map(name => name.toLowerCase());
 export const webCheckTimeoutMs = intFromEnv('WEB_CHECK_TIMEOUT_MS', 5_000, 1);
 export const maxRdapResponseBytes = Math.max(1, intFromEnv('MAX_RDAP_RESPONSE_BYTES', 256 * 1024));

@@ -100,7 +100,16 @@ export function checkWebsite(domain: string, now = Date.now()): Promise<WebCheck
  * Optional extra signals for a domain: nameservers, email setup (MX, SPF, DMARC) and an HTTPS/TLS check.
  * Never throws; checks that fail are left out or reported in their own fields.
  */
-export async function getInsights(domain: string, resolvesPublicly: boolean, resolver: Resolver = createResolver()): Promise<Insights> {
+export async function getInsights(domain: string, resolvesPublicly: boolean, resolver: Resolver = createResolver(),
+    nonPublic = false): Promise<Insights> {
+    if (nonPublic) {
+        // the name points at private addresses: don't reveal anything else about it (internal DNS views)
+        return {
+            email: { mx: [], acceptsMail: false, spf: false, dmarc: false },
+            web: { reachable: false, error: 'no public address' },
+            skipped: 'non-public-address'
+        };
+    }
     const [ns, mx, txt, dmarcTxt, web] = await Promise.all([
         query(() => resolver.resolveNs(domain)),
         query(() => resolver.resolveMx(domain)),
