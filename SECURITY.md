@@ -36,6 +36,12 @@ In scope, for example:
 Out of scope: volumetric DDoS, findings that require a compromised host or deliberately unsafe
 configuration, and the accuracy of third-party WHOIS/RDAP data.
 
+## Operational notes
+
+- API keys are configured as SHA-256 digests and read at startup; revoking a key requires a restart.
+- Rate limits and lookup budgets are per process; multiple instances multiply them.
+- The server refuses to bind a non-loopback address without API keys unless `AUTH_DISABLED=true`.
+
 ## Secrets
 
 This repository must never contain secrets. If you find a committed key or token, report it privately as

@@ -42,7 +42,7 @@ npm install
 npm run start:tsnode
 ```
 
-The service starts on **http://localhost:8080**.
+The service starts on **http://127.0.0.1:8080** (loopback only by default).
 
 | Script | What it does |
 |---|---|
@@ -81,12 +81,13 @@ all; copy it to `.env` (gitignored) and run with `node --env-file=.env ./dist/ap
 | Variable | Default | Description |
 |---|---|---|
 | `API_PORT` | `8080` | Port the server listens on |
-| `API_HOST` | `0.0.0.0` | Address the server binds to. Use `127.0.0.1` to accept local connections only |
+| `API_HOST` | `127.0.0.1` | Address the server binds to. Set `0.0.0.0` to serve other machines (requires `API_KEYS_SHA256` or `AUTH_DISABLED=true`) |
 | `APP_NAME` | `NameInsight` | API title shown in Swagger UI |
 | `LOG_REQUESTS` | `true` | Set to `false` to turn off the per-request access log |
 | `SHUTDOWN_TIMEOUT_MS` | `10000` | On SIGTERM/SIGINT, how long in-flight requests may finish before connections are force-closed |
 | `CORS_ORIGINS` | _(empty)_ | Comma-separated origins allowed to call the API from a browser, e.g. `https://app.example.com`. Empty means no cross-origin access |
 | `TRUST_PROXY_HOPS` | `0` | Number of reverse proxies in front of the service. Set this behind a load balancer so rate limiting uses the real client IP |
+| `AUTH_DISABLED` | `false` | Set `true` to deliberately serve a non-loopback address without API keys (e.g. behind an authenticating proxy) |
 | `API_KEYS_SHA256` | _(empty)_ | Comma-separated SHA-256 digests of valid API keys. When set, `/api/*` requires a key (see [Authentication](#authentication)) |
 | `RATE_LIMIT_MAX` | `30` | Requests allowed per client (API key, or IP) per window on `/api/*` |
 | `RATE_LIMIT_WINDOW_MS` | `60000` | Rate-limit window in milliseconds |
@@ -126,8 +127,15 @@ API_KEYS_SHA256=<digest>[,<digest>...]
 
 Clients send the key as `Authorization: Bearer <key>` or `X-API-Key: <key>`. The server stores and compares only
 digests (in constant time), never logs keys, and returns `401` for a missing or wrong key. `/healthz` and the docs stay
-open. Without `API_KEYS_SHA256` the API is open, and the server logs a warning at startup if it is reachable beyond
-localhost.
+open.
+
+**Secure by default:** the server binds to `127.0.0.1` unless `API_HOST` says otherwise, and **refuses to start** on a
+non-loopback address without `API_KEYS_SHA256`, unless you explicitly set `AUTH_DISABLED=true` (for example when an
+authenticating proxy or private network controls access). Keys are read at startup, so adding or revoking a key
+requires a restart.
+
+Requests with a missing or wrong key are rate limited per IP (10x `RATE_LIMIT_MAX`) before the key check, and the
+access log records a non-secret client id (a digest prefix) for authenticated requests, never the key.
 
 > Keep keys in a secret or password manager. Never commit them or put them in issues or PRs.
 
@@ -238,7 +246,8 @@ deterministic. HTTP behavior is tested with [supertest](https://github.com/ladjs
 ## Known limitations
 
 - **Authentication is opt-in.** Set `API_KEYS_SHA256` before exposing the service publicly.
-- **The rate limit is per process and in memory.** It resets on restart and isn't shared between instances.
+- **Rate limits and lookup budgets are per process and in memory.** They reset on restart, and N instances allow
+  N times the limits.
   The lookup budget (`LOOKUP_BUDGET_MAX`) additionally caps domains per client per window.
 - **WHOIS servers rate-limit heavy use.** Large or frequent bulk requests may start getting `whoisError` results.
 - **`available` is an estimate** (see the note at the top).

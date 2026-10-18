@@ -44,6 +44,26 @@ export function apiKeyAuth(keyHashes: string[]) {
     };
 }
 
+/** True for addresses only reachable from this machine. */
+export function isLoopbackHost(host: string): boolean {
+    return host === 'localhost' || host === '::1' || /^127\.\d+\.\d+\.\d+$/.test(host);
+}
+
+/**
+ * Secure-by-default startup check: refuses to serve a non-loopback address without API keys unless
+ * authentication was explicitly disabled. Returns a warning to log, if any.
+ */
+export function checkExposure(options: { host: string, keyCount: number, authDisabled: boolean }): string | undefined {
+    if (options.keyCount > 0 || isLoopbackHost(options.host)) {
+        return undefined;
+    }
+    if (!options.authDisabled) {
+        throw new Error(`Refusing to serve ${options.host} without API keys. Set API_KEYS_SHA256 (see npm run generate-api-key), ` +
+            'bind to 127.0.0.1, or set AUTH_DISABLED=true if access is controlled elsewhere.');
+    }
+    return `AUTH_DISABLED=true: serving ${options.host} without API keys. Anyone who can reach it can use it.`;
+}
+
 /** Identifies the caller for rate limiting: the API key (when authenticated) or the client IP/IPv6 subnet. */
 export function clientKey(req: Request, res: Response): string {
     return (res.locals.clientKey as string | undefined) ?? `ip:${ipKeyGenerator(req.ip ?? 'unknown')}`;

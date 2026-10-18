@@ -254,7 +254,8 @@ export const openApiSpec = new OpenApiGeneratorV3(registry.definitions).generate
             'Domains that resolve to private or reserved addresses are never pinged (`probe.skipped = "non-public-address"`).',
             '',
             `**Limits:** up to ${config.maxDomainsPerRequest} domains per bulk request, ${config.lookupConcurrency} looked up at a time; ` +
-            `${config.rateLimitMax} requests and ${config.lookupBudgetMax} domain lookups per ${config.rateLimitWindowMs / 1000}s per client.`,
+            `${config.rateLimitMax} requests per ${config.rateLimitWindowMs / 1000}s and ${config.lookupBudgetMax} domain lookups per ` +
+            `${config.lookupBudgetWindowMs / 1000}s per client.`,
             '',
             authEnabled
                 ? '**Authentication:** required. Send an API key as `Authorization: Bearer <key>` or `X-API-Key: <key>` (use **Authorize** above).'

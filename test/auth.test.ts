@@ -111,7 +111,7 @@ describe('API_KEYS_SHA256 validation', () => {
 
 describe('lookup budget (domains per window, per client)', () => {
     it('charges one unit per domain and returns 429 with Retry-After when exceeded', async () => {
-        const app = appWith({ API_KEYS_SHA256: '', LOOKUP_BUDGET_MAX: '5' });
+        const app = appWith({ API_KEYS_SHA256: '', LOOKUP_BUDGET_MAX: '5', MAX_DOMAINS_PER_REQUEST: '5' });
         await request(app).post(`${API}/_payload`).send({ domains: ['a.com', 'b.com', 'c.com', 'd.com'] }).expect(200);
 
         const res = await request(app).post(`${API}/_payload`).send({ domains: ['e.com', 'f.com'] }).expect(429);
@@ -123,13 +123,15 @@ describe('lookup budget (domains per window, per client)', () => {
     });
 
     it('does not charge invalid requests', async () => {
-        const app = appWith({ API_KEYS_SHA256: '', LOOKUP_BUDGET_MAX: '1' });
+        const app = appWith({ API_KEYS_SHA256: '', LOOKUP_BUDGET_MAX: '2', MAX_DOMAINS_PER_REQUEST: '2' });
         await request(app).post(`${API}/_payload`).send({ domains: ['a.com', '10.0.0.1'] }).expect(400);
         await request(app).get(`${API}/a.com`).expect(200);
+        await request(app).get(`${API}/b.com`).expect(200);
+        await request(app).get(`${API}/c.com`).expect(429);
     });
 
     it('tracks budgets per API key', async () => {
-        const app = appWith({ API_KEYS_SHA256: `${sha256(keyA)},${sha256(keyB)}`, LOOKUP_BUDGET_MAX: '1' });
+        const app = appWith({ API_KEYS_SHA256: `${sha256(keyA)},${sha256(keyB)}`, LOOKUP_BUDGET_MAX: '1', MAX_DOMAINS_PER_REQUEST: '1' });
         await request(app).get(`${API}/a.com`).set('X-API-Key', keyA).expect(200);
         await request(app).get(`${API}/b.com`).set('X-API-Key', keyA).expect(429);
         await request(app).get(`${API}/b.com`).set('X-API-Key', keyB).expect(200);
