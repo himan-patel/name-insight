@@ -74,8 +74,8 @@ export function createApp(): express.Application {
             return res.status(error.status).json({ error: error.message, details: error.details });
         }
         // other client errors from Express itself (malformed JSON, body too large, bad URL encoding)
-        const expressError = error as { status?: number, statusCode?: number, expose?: boolean, message?: string } | undefined;
-        const status = expressError?.status || expressError?.statusCode;
+        const expressError = (error ?? {}) as { status?: number, statusCode?: number, expose?: boolean, message?: string };
+        const status = expressError.status ?? expressError.statusCode ?? 500;
         if (status >= 400 && status < 500) {
             // only messages flagged as safe are returned
             return res.status(status).json({ error: expressError.expose ? expressError.message : 'Bad request' });

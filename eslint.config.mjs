@@ -15,9 +15,8 @@ export default tseslint.config(
             'prefer-const': 'error',
             // Express error handlers must declare all four parameters
             '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
-            // existing code relies on these; tighten as part of enabling strict mode
-            '@typescript-eslint/no-explicit-any': 'warn',
-            '@typescript-eslint/no-require-imports': 'warn'
+            '@typescript-eslint/no-explicit-any': 'error',
+            '@typescript-eslint/no-require-imports': 'error'
         }
     }
 );

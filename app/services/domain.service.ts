@@ -7,7 +7,7 @@ import * as config from './../config/global.config';
 import { createResolver } from './dns-resolver';
 import { isPublicAddress } from './domain-validation';
 import { whoisLookup } from './whois.client';
-import { mapWithConcurrency, Semaphore, withTimeout } from '../utils/async';
+import { errorMessage, mapWithConcurrency, Semaphore, withTimeout } from '../utils/async';
 
 /** DNS errors meaning "this name has no records", as opposed to a lookup failure. */
 const NO_RECORDS_CODES = ['ENOTFOUND', 'ENODATA'];
@@ -23,11 +23,11 @@ export interface DnsResult {
   error?: string;
 }
 
-/** Ping result; extra fields come from the `ping` library or `skipped` when no ping was sent. */
-export interface PingProbe {
+/** Ping result from the `ping` library, or the same shape with `skipped` set when no ping was sent. */
+export interface PingProbe extends Omit<Partial<ping.PingResponse>, 'host' | 'alive'> {
   host: string;
   alive: boolean;
-  [field: string]: unknown;
+  skipped?: string;
 }
 
 export interface DomainInfo {
@@ -88,7 +88,7 @@ export class DomainService {
     const settled = await Promise.allSettled([resolver.resolve4(domain), resolver.resolve6(domain)]);
 
     const addresses: string[] = [];
-    let error: string;
+    let error: string | undefined;
     for (const result of settled) {
       if (result.status === 'fulfilled') {
         addresses.push(...result.value);
@@ -116,14 +116,14 @@ export class DomainService {
     }
 
     try {
-      const result = await withTimeout<PingProbe>(
+      const result = await withTimeout<ping.PingResponse>(
         ping.promise.probe(ipv4, { timeout: config.pingTimeoutSeconds }),
         (config.pingTimeoutSeconds + 2) * 1000,
         'ping timed out'
       );
       return { ...result, host: domain, numeric_host: ipv4 };
     } catch (error) {
-      console.warn(`DomainService.probeDomain :: Ping failed for [${domain}]: ${error.message}`);
+      console.warn(`DomainService.probeDomain :: Ping failed for [${domain}]: ${errorMessage(error)}`);
       return this.skippedProbe(domain, 'ping-failed');
     }
   }
@@ -135,8 +135,9 @@ export class DomainService {
     try {
       return { whois: await whoisLookup(domain) };
     } catch (error) {
-      console.warn(`DomainService.whoisDomain :: WHOIS failed for [${domain}]: ${error.message}`);
-      const timedOut = /timed out/i.test(error.message);
+      const message = errorMessage(error);
+      console.warn(`DomainService.whoisDomain :: WHOIS failed for [${domain}]: ${message}`);
+      const timedOut = /timed out/i.test(message);
       return { whois: null, whoisError: timedOut ? 'WHOIS lookup timed out' : 'WHOIS lookup failed' };
     }
   }

@@ -13,7 +13,7 @@ jest.mock('ping', () => ({ promise: { probe: jest.fn() } }));
 describe('rate limiting', () => {
     it('returns 429 after RATE_LIMIT_MAX requests, counting invalid requests too', async () => {
         process.env.RATE_LIMIT_MAX = '3';
-        let createApp: typeof import('../app/app').createApp;
+        let createApp!: typeof import('../app/app').createApp;
         jest.isolateModules(() => {
             // eslint-disable-next-line @typescript-eslint/no-require-imports -- isolateModules needs a synchronous require
             ({ createApp } = require('../app/app'));
