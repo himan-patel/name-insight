@@ -48,7 +48,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "0.131.0",
     "@asteasolutions/zod-to-openapi": "9.1.0",
-    "@modelcontextprotocol/sdk": "1.32.0",
+    "@modelcontextprotocol/sdk": "1.32.1",
     "cors": "2.8.6",
     "express": "4.22.3",
     "express-rate-limit": "8.7.0",
